@@ -1,8 +1,10 @@
 using UnityEngine;
 using System.Collections.Generic;
+using KaleidoscopeEngine.FX;
 using KaleidoscopeEngine.Geometry;
 using KaleidoscopeEngine.Lighting;
 using KaleidoscopeEngine.Materials;
+using KaleidoscopeEngine.Mirrors;
 
 namespace KaleidoscopeEngine.PhysicsSandbox
 {
@@ -18,10 +20,16 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         [SerializeField] private GemstoneMaterialAssigner materialAssigner;
         [SerializeField] private KaleidoscopeLightingRig lightingRig;
         [SerializeField] private GemGeometryAssigner geometryAssigner;
+        [SerializeField] private GemSparkleController sparkleController;
+        [SerializeField] private FakeCausticBunnyProjector causticProjector;
+        [SerializeField] private KaleidoscopeRenderPipeline mirrorPipeline;
+        [SerializeField] private KaleidoscopeMirrorController mirrorController;
 
         [Header("Input")]
         [SerializeField] private float shakeStrength = 1f;
         [SerializeField] private float axialSpeedChangePerSecond = 120f;
+        [SerializeField] private float movingLightIntensityChangePerSecond = 1.5f;
+        [SerializeField] private float sparkleIntensityChangePerSecond = 1.2f;
 
         private readonly HashSet<char> heldCharacters = new HashSet<char>();
 
@@ -37,7 +45,11 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             PhysicsSandboxMetrics sandboxMetrics,
             GemstoneMaterialAssigner opticalAssigner = null,
             KaleidoscopeLightingRig opticalLightingRig = null,
-            GemGeometryAssigner proceduralGeometryAssigner = null)
+            GemGeometryAssigner proceduralGeometryAssigner = null,
+            GemSparkleController gemSparkles = null,
+            FakeCausticBunnyProjector fakeCaustics = null,
+            KaleidoscopeRenderPipeline kaleidoscopePipeline = null,
+            KaleidoscopeMirrorController kaleidoscopeMirror = null)
         {
             cameraController = sandboxCamera;
             chamberDebugView = debugView;
@@ -45,6 +57,10 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             materialAssigner = opticalAssigner;
             lightingRig = opticalLightingRig;
             geometryAssigner = proceduralGeometryAssigner;
+            sparkleController = gemSparkles;
+            causticProjector = fakeCaustics;
+            mirrorPipeline = kaleidoscopePipeline;
+            mirrorController = kaleidoscopeMirror;
         }
 
         private void Update()
@@ -88,7 +104,14 @@ namespace KaleidoscopeEngine.PhysicsSandbox
                 spawner.Respawn();
             }
 
-            if (IsPressed(KeyCode.X, 'ч'))
+            if (IsPressed(KeyCode.M, 'ь'))
+            {
+                mirrorPipeline?.ToggleView();
+            }
+
+            bool kaleidoscopeView = mirrorPipeline != null && mirrorPipeline.KaleidoscopeView;
+
+            if (!kaleidoscopeView && IsPressed(KeyCode.X, 'ч'))
             {
                 chamber.ToggleAxialRotation();
             }
@@ -103,7 +126,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
                 cameraController?.ResetToFrontView();
             }
 
-            if (IsPressed(KeyCode.V, 'м'))
+            if (IsPressed(KeyCode.H, 'р'))
             {
                 chamberDebugView?.ToggleChamberVisuals();
             }
@@ -136,6 +159,76 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             if (IsPressed(KeyCode.J, 'о'))
             {
                 geometryAssigner?.ToggleGeometryMode();
+            }
+
+            if (IsPressed(KeyCode.K, 'л'))
+            {
+                sparkleController?.ToggleSparkles();
+            }
+
+            if (IsPressed(KeyCode.N, 'т'))
+            {
+                causticProjector?.ToggleCaustics();
+            }
+
+            if (Input.GetKeyDown(KeyCode.Alpha1))
+            {
+                mirrorController?.AdjustSegmentCount(-1);
+            }
+
+            if (Input.GetKeyDown(KeyCode.Alpha2))
+            {
+                mirrorController?.AdjustSegmentCount(1);
+            }
+
+            if (Input.GetKey(KeyCode.Alpha3))
+            {
+                mirrorController?.AdjustZoom(-1f);
+            }
+
+            if (Input.GetKey(KeyCode.Alpha4))
+            {
+                mirrorController?.AdjustZoom(1f);
+            }
+
+            if (Input.GetKey(KeyCode.Alpha5))
+            {
+                mirrorController?.AdjustRadialDistortion(-1f);
+            }
+
+            if (Input.GetKey(KeyCode.Alpha6))
+            {
+                mirrorController?.AdjustRadialDistortion(1f);
+            }
+
+            if (IsHeld(KeyCode.Z, 'я'))
+            {
+                mirrorController?.RotatePattern(-1f);
+            }
+
+            if (kaleidoscopeView && IsHeld(KeyCode.X, 'ч'))
+            {
+                mirrorController?.RotatePattern(1f);
+            }
+
+            if (IsHeld(KeyCode.LeftBracket, 'х'))
+            {
+                lightingRig?.AdjustMovingLightIntensity(-movingLightIntensityChangePerSecond * Time.deltaTime);
+            }
+
+            if (IsHeld(KeyCode.RightBracket, 'ъ'))
+            {
+                lightingRig?.AdjustMovingLightIntensity(movingLightIntensityChangePerSecond * Time.deltaTime);
+            }
+
+            if (IsHeld(KeyCode.Comma, 'б'))
+            {
+                sparkleController?.AdjustSparkleIntensity(-sparkleIntensityChangePerSecond * Time.deltaTime);
+            }
+
+            if (IsHeld(KeyCode.Period, 'ю'))
+            {
+                sparkleController?.AdjustSparkleIntensity(sparkleIntensityChangePerSecond * Time.deltaTime);
             }
         }
 
@@ -225,15 +318,23 @@ namespace KaleidoscopeEngine.PhysicsSandbox
                 case KeyCode.E: return 'у';
                 case KeyCode.R: return 'к';
                 case KeyCode.T: return 'е';
+                case KeyCode.M: return 'ь';
                 case KeyCode.X: return 'ч';
+                case KeyCode.Z: return 'я';
                 case KeyCode.C: return 'с';
-                case KeyCode.V: return 'м';
+                case KeyCode.H: return 'р';
                 case KeyCode.B: return 'и';
                 case KeyCode.F: return 'а';
                 case KeyCode.L: return 'д';
                 case KeyCode.P: return 'з';
                 case KeyCode.O: return 'щ';
                 case KeyCode.J: return 'о';
+                case KeyCode.K: return 'л';
+                case KeyCode.N: return 'т';
+                case KeyCode.LeftBracket: return 'х';
+                case KeyCode.RightBracket: return 'ъ';
+                case KeyCode.Comma: return 'б';
+                case KeyCode.Period: return 'ю';
                 default: return '\0';
             }
         }

@@ -18,7 +18,9 @@ namespace KaleidoscopeEngine.Lighting
         [SerializeField] private Light rimLight;
         [SerializeField] private Light accentLight;
         [SerializeField] private Light movingLight;
+        [SerializeField] private Light particleSparkLight;
         [SerializeField] private LightOrbitController movingLightOrbit;
+        [SerializeField] private LightOrbitController particleSparkOrbit;
 
         [Header("Parameters")]
         [SerializeField] private float keyIntensity = 2.4f;
@@ -26,9 +28,17 @@ namespace KaleidoscopeEngine.Lighting
         [SerializeField] private float rimIntensity = 1.3f;
         [SerializeField] private float accentIntensity = 1.6f;
         [SerializeField] private float movingLightIntensity = 1.4f;
+        [SerializeField] private float sparkLightIntensity = 1.6f;
+        [SerializeField] private Color keyColor = new Color(1f, 0.95f, 0.86f);
+        [SerializeField] private Color fillColor = new Color(0.5f, 0.68f, 1f);
+        [SerializeField] private Color rimColor = new Color(0.78f, 0.92f, 1f);
+        [SerializeField] private Color accentColor = new Color(1f, 0.72f, 0.42f);
+        [SerializeField] private Color movingLightColor = Color.white;
+        [SerializeField] private Color sparkLightColor = new Color(0.72f, 0.94f, 1f);
         [SerializeField] private float orbitRadius = 3.8f;
         [SerializeField] private float orbitSpeed = 28f;
         [SerializeField] private bool movingLightEnabled = true;
+        [SerializeField] private bool randomizeLightPositions = true;
         [SerializeField] private int seed = 4217;
 
         [Header("Post FX Targets")]
@@ -46,6 +56,7 @@ namespace KaleidoscopeEngine.Lighting
         public bool MovingLightEnabled => movingLightEnabled;
         public float KeyIntensity => keyLight != null ? keyLight.intensity : keyIntensity;
         public float AccentIntensity => accentLight != null ? accentLight.intensity : accentIntensity;
+        public float MovingLightIntensity => movingLight != null ? movingLight.intensity : movingLightIntensity;
         public float BloomIntensity => bloomIntensity;
 
         public void Configure(Transform lightingTarget)
@@ -64,10 +75,15 @@ namespace KaleidoscopeEngine.Lighting
             rimLight = CreateLight("Optical Rim Light", LightType.Point, Vector3.zero, new Vector3(2.2f, 1.9f, 2.7f));
             accentLight = CreateLight("Optical Accent Light", LightType.Spot, new Vector3(34f, -126f, 0f), new Vector3(-1.8f, 2.4f, 2.2f));
             movingLight = CreateLight("Moving Spark Light", LightType.Point, Vector3.zero, new Vector3(0f, 1.4f, -3.8f));
+            particleSparkLight = CreateLight("Particle Spark Light", LightType.Point, Vector3.zero, new Vector3(0f, -0.8f, 2.6f));
 
             movingLight.range = 7f;
+            particleSparkLight.range = 3.2f;
             movingLightOrbit = movingLight.gameObject.AddComponent<LightOrbitController>();
-            movingLightOrbit.Configure(target, orbitRadius, orbitSpeed, 0.55f, seed);
+            int orbitSeed = randomizeLightPositions ? seed : 0;
+            movingLightOrbit.Configure(target, orbitRadius, orbitSpeed, 0.55f, orbitSeed);
+            particleSparkOrbit = particleSparkLight.gameObject.AddComponent<LightOrbitController>();
+            particleSparkOrbit.Configure(target, orbitRadius * 0.62f, -orbitSpeed * 1.75f, -0.18f, orbitSeed + 97);
         }
 
         private Light CreateLight(string lightName, LightType type, Vector3 rotation, Vector3 position)
@@ -88,14 +104,13 @@ namespace KaleidoscopeEngine.Lighting
         private void BuildRuntimePresets()
         {
             presets.Clear();
-            presets.Add(Preset("Jewelry Studio", new Color(1f, 0.95f, 0.86f), new Color(0.5f, 0.68f, 1f), new Color(0.78f, 0.92f, 1f), new Color(1f, 0.72f, 0.42f), 2.4f, 0.85f, 1.25f, 1.45f, 1.25f, 0.45f));
-            presets.Add(Preset("Opal Softbox", new Color(0.9f, 0.96f, 1f), new Color(0.8f, 0.88f, 1f), new Color(1f, 0.72f, 0.92f), new Color(0.6f, 0.95f, 1f), 1.65f, 1.35f, 0.9f, 1.1f, 1.0f, 0.55f));
-            presets.Add(Preset("Ruby Deep Glow", new Color(1f, 0.84f, 0.72f), new Color(0.34f, 0.12f, 0.16f), new Color(0.8f, 0.16f, 0.08f), new Color(1f, 0.06f, 0.03f), 2.1f, 0.55f, 1.1f, 1.8f, 1.45f, 0.5f));
-            presets.Add(Preset("Emerald Temple", new Color(0.85f, 1f, 0.82f), new Color(0.08f, 0.32f, 0.18f), new Color(0.4f, 1f, 0.58f), new Color(0.1f, 0.95f, 0.36f), 2.0f, 0.65f, 1.35f, 1.7f, 1.25f, 0.38f));
-            presets.Add(Preset("Crystal Laboratory", new Color(0.88f, 0.94f, 1f), new Color(0.5f, 0.7f, 1f), new Color(0.82f, 0.95f, 1f), new Color(0.68f, 0.9f, 1f), 2.55f, 0.95f, 1.5f, 1.9f, 1.7f, 0.42f));
+            presets.Add(Preset("Ruby Reactor", new Color(1f, 0.78f, 0.62f), new Color(0.28f, 0.08f, 0.1f), new Color(1f, 0.2f, 0.08f), new Color(1f, 0.05f, 0.025f), new Color(1f, 0.86f, 0.72f), 2.35f, 0.55f, 1.65f, 2.1f, 1.8f, 1.45f, 0.52f));
+            presets.Add(Preset("Emerald Temple", new Color(0.82f, 1f, 0.78f), new Color(0.08f, 0.28f, 0.18f), new Color(0.36f, 1f, 0.62f), new Color(0.04f, 0.95f, 0.38f), new Color(0.72f, 1f, 0.85f), 2.05f, 0.7f, 1.55f, 1.85f, 1.35f, 1.3f, 0.4f));
+            presets.Add(Preset("Opal Dream", new Color(0.92f, 0.98f, 1f), new Color(0.78f, 0.88f, 1f), new Color(1f, 0.68f, 0.94f), new Color(0.62f, 0.94f, 1f), new Color(1f, 0.82f, 1f), 1.75f, 1.45f, 1.15f, 1.35f, 1.2f, 1.15f, 0.58f));
+            presets.Add(Preset("Crystal Lab", new Color(0.86f, 0.94f, 1f), new Color(0.46f, 0.66f, 1f), new Color(0.9f, 0.98f, 1f), new Color(0.58f, 0.9f, 1f), new Color(0.72f, 0.96f, 1f), 2.65f, 1.0f, 1.75f, 2.05f, 2.0f, 1.8f, 0.46f));
         }
 
-        private LightingPreset Preset(string name, Color key, Color fill, Color rim, Color accent, float keyI, float fillI, float rimI, float accentI, float movingI, float bloom)
+        private LightingPreset Preset(string name, Color key, Color fill, Color rim, Color accent, Color spark, float keyI, float fillI, float rimI, float accentI, float movingI, float sparkI, float bloom)
         {
             LightingPreset preset = ScriptableObject.CreateInstance<LightingPreset>();
             preset.displayName = name;
@@ -103,11 +118,13 @@ namespace KaleidoscopeEngine.Lighting
             preset.fillColor = fill;
             preset.rimColor = rim;
             preset.accentColor = accent;
+            preset.sparkColor = spark;
             preset.keyIntensity = keyI;
             preset.fillIntensity = fillI;
             preset.rimIntensity = rimI;
             preset.accentIntensity = accentI;
             preset.movingLightIntensity = movingI;
+            preset.sparkLightIntensity = sparkI;
             preset.bloomIntensity = bloom;
             return preset;
         }
@@ -118,6 +135,26 @@ namespace KaleidoscopeEngine.Lighting
             if (movingLight != null)
             {
                 movingLight.enabled = movingLightEnabled;
+            }
+
+            if (particleSparkLight != null)
+            {
+                particleSparkLight.enabled = movingLightEnabled;
+            }
+        }
+
+        public void AdjustMovingLightIntensity(float delta)
+        {
+            movingLightIntensity = Mathf.Clamp(movingLightIntensity + delta, 0f, 8f);
+            sparkLightIntensity = Mathf.Clamp(sparkLightIntensity + delta * 0.75f, 0f, 8f);
+            if (movingLight != null)
+            {
+                movingLight.intensity = movingLightIntensity;
+            }
+
+            if (particleSparkLight != null)
+            {
+                particleSparkLight.intensity = sparkLightIntensity;
             }
         }
 
@@ -146,17 +183,30 @@ namespace KaleidoscopeEngine.Lighting
             rimIntensity = preset.rimIntensity;
             accentIntensity = preset.accentIntensity;
             movingLightIntensity = preset.movingLightIntensity;
+            sparkLightIntensity = preset.sparkLightIntensity;
+            keyColor = preset.keyColor;
+            fillColor = preset.fillColor;
+            rimColor = preset.rimColor;
+            accentColor = preset.accentColor;
+            sparkLightColor = preset.sparkColor;
+            movingLightColor = Color.white;
             bloomIntensity = preset.bloomIntensity;
             exposureCompensation = preset.exposureCompensation;
 
-            ApplyLight(keyLight, preset.keyColor, keyIntensity);
-            ApplyLight(fillLight, preset.fillColor, fillIntensity);
-            ApplyLight(rimLight, preset.rimColor, rimIntensity);
-            ApplyLight(accentLight, preset.accentColor, accentIntensity);
-            ApplyLight(movingLight, Color.white, movingLightIntensity);
+            ApplyLight(keyLight, keyColor, keyIntensity);
+            ApplyLight(fillLight, fillColor, fillIntensity);
+            ApplyLight(rimLight, rimColor, rimIntensity);
+            ApplyLight(accentLight, accentColor, accentIntensity);
+            ApplyLight(movingLight, movingLightColor, movingLightIntensity);
+            ApplyLight(particleSparkLight, sparkLightColor, sparkLightIntensity);
             if (movingLight != null)
             {
                 movingLight.enabled = movingLightEnabled;
+            }
+
+            if (particleSparkLight != null)
+            {
+                particleSparkLight.enabled = movingLightEnabled;
             }
 
             ApplyPostProcessValues();

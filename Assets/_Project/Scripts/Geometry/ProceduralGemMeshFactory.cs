@@ -23,8 +23,8 @@ namespace KaleidoscopeEngine.Geometry
         public static Mesh CreateOpalPebble(int seed)
         {
             System.Random random = new System.Random(seed);
-            const int longitude = 10;
-            const int latitude = 7;
+            const int longitude = 12;
+            const int latitude = 8;
             Vector3[] vertices = new Vector3[(longitude + 1) * (latitude + 1)];
             Vector2[] uvs = new Vector2[vertices.Length];
             int[] triangles = new int[longitude * latitude * 6];
@@ -42,8 +42,9 @@ namespace KaleidoscopeEngine.Geometry
                 {
                     float u = x / (float)longitude;
                     float theta = u * Mathf.PI * 2f;
-                    float ripple = 1f + Mathf.Sin(theta * 2.3f + phi * 1.7f + ripplePhase) * 0.07f;
-                    ripple += Mathf.Cos(theta * 4.1f + ripplePhase) * 0.035f;
+                    float ripple = 1f + Mathf.Sin(theta * 2.3f + phi * 1.7f + ripplePhase) * 0.055f;
+                    ripple += Mathf.Cos(theta * 4.1f + phi * 0.8f + ripplePhase) * 0.028f;
+                    ripple += Mathf.Sin(theta * 6.7f - phi * 2.2f + ripplePhase) * 0.014f;
                     Vector3 unit = new Vector3(Mathf.Cos(phi) * Mathf.Cos(theta), Mathf.Sin(phi), Mathf.Cos(phi) * Mathf.Sin(theta));
                     vertices[y * (longitude + 1) + x] = Vector3.Scale(unit * ripple, new Vector3(0.96f, squashY, squashZ));
                     uvs[y * (longitude + 1) + x] = new Vector2(u, v);
@@ -76,10 +77,10 @@ namespace KaleidoscopeEngine.Geometry
             System.Random random = new System.Random(seed);
             return CreateFacetedBipyramid(
                 "Ruby Procedural Faceted",
-                8,
-                RandomRange(random, 0.5f, 0.62f),
-                RandomRange(random, 0.3f, 0.42f),
-                RandomRange(random, 0.13f, 0.22f),
+                10,
+                RandomRange(random, 0.48f, 0.64f),
+                RandomRange(random, 0.32f, 0.46f),
+                RandomRange(random, 0.11f, 0.2f),
                 random);
         }
 
@@ -97,30 +98,36 @@ namespace KaleidoscopeEngine.Geometry
         public static Mesh CreateAmethystShard(int seed)
         {
             System.Random random = new System.Random(seed);
-            return CreateShard("Amethyst Procedural Shard", RandomRange(random, 0.5f, 0.75f), RandomRange(random, 0.9f, 1.35f), RandomRange(random, 0.24f, 0.42f), random, jagged: true);
+            return CreateShard("Amethyst Procedural Shard", RandomRange(random, 0.5f, 0.78f), RandomRange(random, 0.9f, 1.42f), RandomRange(random, 0.24f, 0.42f), random, jagged: true);
         }
 
         public static Mesh CreateQuartzShard(int seed)
         {
             System.Random random = new System.Random(seed);
-            return CreatePointedShard("Quartz Procedural Pointed Shard", RandomRange(random, 0.34f, 0.5f), RandomRange(random, 1.15f, 1.62f), RandomRange(random, 0.18f, 0.34f), random);
+            return CreatePointedShard("Quartz Procedural Pointed Shard", RandomRange(random, 0.32f, 0.5f), RandomRange(random, 1.2f, 1.72f), RandomRange(random, 0.16f, 0.3f), random);
         }
 
         public static Mesh CreateGlassFragment(int seed)
         {
             System.Random random = new System.Random(seed);
-            return CreateShard("Glass Procedural Fragment", RandomRange(random, 0.52f, 0.95f), RandomRange(random, 0.95f, 1.5f), RandomRange(random, 0.06f, 0.14f), random, jagged: true);
+            return CreateShard("Glass Procedural Fragment", RandomRange(random, 0.56f, 1.05f), RandomRange(random, 1.0f, 1.62f), RandomRange(random, 0.045f, 0.12f), random, jagged: true);
         }
 
         public static Mesh CreateMicroCrystal(int seed)
         {
             System.Random random = new System.Random(seed);
-            if (random.NextDouble() < 0.5)
+            double variant = random.NextDouble();
+            if (variant < 0.4)
             {
                 return CreateTetra("Micro Procedural Tetra", random);
             }
 
-            return CreateOcta("Micro Procedural Octa", random);
+            if (variant < 0.8)
+            {
+                return CreateOcta("Micro Procedural Octa", random);
+            }
+
+            return CreateShard("Micro Procedural Chip", RandomRange(random, 0.35f, 0.55f), RandomRange(random, 0.45f, 0.75f), RandomRange(random, 0.08f, 0.16f), random, jagged: true);
         }
 
         private static Mesh CreateFacetedBipyramid(string name, int sides, float radius, float height, float tableRadius, System.Random random)
@@ -131,15 +138,19 @@ namespace KaleidoscopeEngine.Geometry
             Vector3 bottom = Vector3.down * height * RandomRange(random, 0.9f, 1.22f);
             Vector3[] girdle = Ring(sides, radius, 0f, random, 0.08f);
             Vector3[] table = Ring(sides, tableRadius, height * 0.55f, random, 0.04f);
+            Vector3[] crown = Ring(sides, radius * 0.56f, height * 0.25f, random, 0.055f, 0.5f);
             Vector3[] lower = Ring(sides, radius * 0.72f, -height * 0.38f, random, 0.07f, 0.5f);
+            Vector3[] pavilion = Ring(sides, radius * 0.36f, -height * 0.68f, random, 0.055f);
 
             for (int i = 0; i < sides; i++)
             {
                 int next = (i + 1) % sides;
-                AddQuad(vertices, triangles, table[i], table[next], girdle[next], girdle[i]);
+                AddQuad(vertices, triangles, table[i], table[next], crown[next], crown[i]);
+                AddQuad(vertices, triangles, crown[i], crown[next], girdle[next], girdle[i]);
                 AddQuad(vertices, triangles, girdle[i], girdle[next], lower[next], lower[i]);
+                AddQuad(vertices, triangles, lower[i], lower[next], pavilion[next], pavilion[i]);
                 AddTriangle(vertices, triangles, table[next], table[i], top);
-                AddTriangle(vertices, triangles, lower[i], lower[next], bottom);
+                AddTriangle(vertices, triangles, pavilion[i], pavilion[next], bottom);
             }
 
             return BuildMesh(name, vertices.ToArray(), triangles.ToArray(), smoothNormals: false);
@@ -152,6 +163,8 @@ namespace KaleidoscopeEngine.Geometry
             List<int> triangles = new List<int>();
             Vector3[] centerA = RingX(sides, radius, -length * 0.5f + bevel, random, 0.06f);
             Vector3[] centerB = RingX(sides, radius * RandomRange(random, 0.9f, 1.08f), length * 0.5f - bevel, random, 0.06f, 0.5f);
+            Vector3[] bevelA = RingX(sides, radius * 0.82f, -length * 0.5f + bevel * 0.35f, random, 0.045f, 0.25f);
+            Vector3[] bevelB = RingX(sides, radius * 0.82f, length * 0.5f - bevel * 0.35f, random, 0.045f, 0.75f);
             Vector3[] capA = RingX(sides, radius * 0.5f, -length * 0.5f, random, 0.04f);
             Vector3[] capB = RingX(sides, radius * 0.5f, length * 0.5f, random, 0.04f, 0.5f);
             Vector3 tipA = Vector3.left * (length * 0.5f + bevel * 0.18f);
@@ -161,8 +174,10 @@ namespace KaleidoscopeEngine.Geometry
             {
                 int next = (i + 1) % sides;
                 AddQuad(vertices, triangles, centerA[i], centerA[next], centerB[next], centerB[i]);
-                AddQuad(vertices, triangles, capA[next], capA[i], centerA[i], centerA[next]);
-                AddQuad(vertices, triangles, centerB[i], centerB[next], capB[next], capB[i]);
+                AddQuad(vertices, triangles, bevelA[i], bevelA[next], centerA[next], centerA[i]);
+                AddQuad(vertices, triangles, centerB[i], centerB[next], bevelB[next], bevelB[i]);
+                AddQuad(vertices, triangles, capA[next], capA[i], bevelA[i], bevelA[next]);
+                AddQuad(vertices, triangles, bevelB[i], bevelB[next], capB[next], capB[i]);
                 AddTriangle(vertices, triangles, capA[i], capA[next], tipA);
                 AddTriangle(vertices, triangles, capB[next], capB[i], tipB);
             }
@@ -176,15 +191,18 @@ namespace KaleidoscopeEngine.Geometry
             List<int> triangles = new List<int>();
             Vector3 leftTip = Vector3.left * length * 0.58f;
             Vector3 rightTip = Vector3.right * length * 0.62f;
-            Vector3[] mid = RingX(5, width, 0f, random, 0.18f, 0.12f);
-            Vector3[] back = RingX(5, width * 0.56f, -length * 0.28f, random, 0.16f, 0.52f);
+            Vector3[] mid = RingX(6, width, 0f, random, 0.18f, 0.12f);
+            Vector3[] front = RingX(6, width * 0.62f, length * 0.24f, random, 0.14f, 0.35f);
+            Vector3[] back = RingX(6, width * 0.56f, -length * 0.28f, random, 0.16f, 0.52f);
             for (int i = 0; i < mid.Length; i++)
             {
                 int next = (i + 1) % mid.Length;
                 mid[i].z *= thickness / Mathf.Max(0.001f, width);
+                front[i].z *= thickness / Mathf.Max(0.001f, width);
                 back[i].z *= thickness / Mathf.Max(0.001f, width);
                 AddQuad(vertices, triangles, back[i], back[next], mid[next], mid[i]);
-                AddTriangle(vertices, triangles, mid[i], mid[next], rightTip);
+                AddQuad(vertices, triangles, mid[i], mid[next], front[next], front[i]);
+                AddTriangle(vertices, triangles, front[i], front[next], rightTip);
                 AddTriangle(vertices, triangles, back[next], back[i], leftTip);
             }
 
@@ -195,7 +213,7 @@ namespace KaleidoscopeEngine.Geometry
         {
             List<Vector3> vertices = new List<Vector3>();
             List<int> triangles = new List<int>();
-            int sides = jagged ? 7 : 5;
+            int sides = jagged ? 9 : 6;
             Vector2[] outline = new Vector2[sides];
             for (int i = 0; i < sides; i++)
             {
@@ -214,6 +232,7 @@ namespace KaleidoscopeEngine.Geometry
                 Vector3 c = new Vector3(outline[next].x, outline[next].y, -thickness * 0.5f);
                 Vector3 d = new Vector3(outline[i].x, outline[i].y, -thickness * RandomRange(random, 0.22f, 0.55f));
                 AddTriangle(vertices, triangles, frontCenter, a, b);
+                AddTriangle(vertices, triangles, frontCenter + Distort(Vector3.zero, random, thickness * 0.18f), b, Vector3.Lerp(a, b, 0.5f) + Vector3.forward * thickness * 0.28f);
                 AddTriangle(vertices, triangles, backCenter, c, d);
                 AddQuad(vertices, triangles, a, d, c, b);
             }

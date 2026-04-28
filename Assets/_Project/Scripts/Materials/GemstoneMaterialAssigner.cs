@@ -198,14 +198,27 @@ namespace KaleidoscopeEngine.Materials
             SetFloat(material, "_SurfaceType", profile.transparency > 0.02f ? 1f : 0f);
             SetFloat(material, "_BlendMode", 0f);
             SetFloat(material, "_AlphaCutoffEnable", 0f);
+            SetFloat(material, "_EnableBlendModePreserveSpecularLighting", 1f);
+            SetFloat(material, "_TransparentDepthPrepassEnable", 1f);
+            SetFloat(material, "_TransparentDepthPostpassEnable", 1f);
             SetFloat(material, "_Smoothness", Mathf.Clamp01(smoothness));
             SetFloat(material, "_Metallic", profile.metallic);
+            SetColor(material, "_SpecularColor", Color.white * Mathf.Max(0.1f, profile.specularIntensity));
             SetFloat(material, "_SpecularAAScreenSpaceVariance", Mathf.Clamp01(profile.specularIntensity * 0.1f));
+            SetFloat(material, "_SpecularAAThreshold", Mathf.Clamp01(profile.specularIntensity * 0.18f));
+            SetFloat(material, "_CoatMask", GetClearCoatAmount(profile));
+            SetFloat(material, "_CoatSmoothness", Mathf.Clamp01(profile.smoothness + 0.08f));
+            SetFloat(material, "_DoubleSidedEnable", 1f);
+            SetFloat(material, "_TransparentBackfaceEnable", 1f);
+            SetFloat(material, "_ReceivesSSRTransparent", profile.transparency > 0.35f ? 1f : 0f);
             SetColor(material, "_EmissiveColor", profile.useEmission ? profile.emissionColor * Mathf.Max(0f, emissionStrength) : Color.black);
             SetFloat(material, "_EmissiveIntensity", profile.useEmission ? Mathf.Max(0f, emissionStrength) : 0f);
             SetColor(material, "_TransmittanceColor", Color.Lerp(profile.baseColor, profile.absorptionColor, profile.absorptionStrength * 0.35f));
             SetFloat(material, "_RefractionModel", 2f);
             SetFloat(material, "_Ior", profile.fakeIOR);
+            SetFloat(material, "_Thickness", GetOpticalThickness(profile));
+            SetFloat(material, "_RefractionThickness", GetOpticalThickness(profile));
+            ApplyWhiteStoneOverrides(material, profile);
 
             if (profile.transparency > 0.02f)
             {
@@ -239,6 +252,93 @@ namespace KaleidoscopeEngine.Materials
         private float RandomRange(float min, float max)
         {
             return Mathf.Lerp(min, max, (float)random.NextDouble());
+        }
+
+        private static float GetClearCoatAmount(GemstoneMaterialProfile profile)
+        {
+            if (profile == null)
+            {
+                return 0f;
+            }
+
+            if (profile.id == "opal")
+            {
+                return 0.28f;
+            }
+
+            if (profile.id == "quartz")
+            {
+                return 0.72f;
+            }
+
+            if (profile.id == "glass_fragment")
+            {
+                return 0.92f;
+            }
+
+            return Mathf.Clamp01(profile.sparkleStrength * 0.22f);
+        }
+
+        private static float GetOpticalThickness(GemstoneMaterialProfile profile)
+        {
+            if (profile == null)
+            {
+                return 0.2f;
+            }
+
+            if (profile.id == "opal")
+            {
+                return 0.55f;
+            }
+
+            if (profile.id == "quartz")
+            {
+                return 0.28f;
+            }
+
+            if (profile.id == "glass_fragment")
+            {
+                return 0.12f;
+            }
+
+            return Mathf.Lerp(0.18f, 0.45f, Mathf.Clamp01(profile.absorptionStrength * 0.5f));
+        }
+
+        private static void ApplyWhiteStoneOverrides(Material material, GemstoneMaterialProfile profile)
+        {
+            if (profile == null)
+            {
+                return;
+            }
+
+            if (profile.id == "opal")
+            {
+                SetColor(material, "_SpecularColor", new Color(0.82f, 0.95f, 1.25f, 1f) * profile.specularIntensity);
+                SetColor(material, "_TransmittanceColor", new Color(1f, 0.76f, 0.95f, 1f));
+                SetFloat(material, "_Smoothness", Mathf.Clamp01(profile.smoothness));
+                SetFloat(material, "_AlphaDstBlend", 10f);
+                SetFloat(material, "_ZWrite", 0f);
+                return;
+            }
+
+            if (profile.id == "quartz")
+            {
+                SetColor(material, "_SpecularColor", new Color(1.35f, 1.45f, 1.55f, 1f));
+                SetColor(material, "_TransmittanceColor", new Color(0.58f, 0.8f, 1f, 1f));
+                SetFloat(material, "_Smoothness", 0.99f);
+                SetFloat(material, "_AlphaDstBlend", 10f);
+                SetFloat(material, "_ZWrite", 0f);
+                return;
+            }
+
+            if (profile.id == "glass_fragment")
+            {
+                SetColor(material, "_SpecularColor", new Color(1.55f, 1.75f, 1.85f, 1f));
+                SetColor(material, "_TransmittanceColor", new Color(0.22f, 0.9f, 1f, 1f));
+                SetFloat(material, "_Smoothness", 1f);
+                SetFloat(material, "_AlphaDstBlend", 10f);
+                SetFloat(material, "_ZWrite", 0f);
+            }
         }
 
         private static void SetColor(Material material, string propertyName, Color value)

@@ -35,6 +35,12 @@ namespace KaleidoscopeEngine.Materials
         [Range(0f, 3f)] public float sparkleStrength = 0.5f;
         [Range(0.1f, 60f)] public float sparkleScale = 16f;
         [Range(0f, 1f)] public float roughnessVariation = 0.08f;
+        [Range(0f, 3f)] public float facetHighlightBoost = 0.6f;
+        [Range(0f, 3f)] public float sparkleResponse = 0.6f;
+        [Range(0f, 2f)] public float causticResponse = 0.25f;
+        [Range(0f, 2f)] public float edgeGlowStrength = 0.15f;
+        [Range(0.5f, 8f)] public float fresnelPower = 3f;
+        [Range(0f, 2f)] public float emissionPulseStrength = 0.25f;
 
         [Header("Material")]
         public int renderQueueOffset;
