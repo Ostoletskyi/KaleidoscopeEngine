@@ -60,16 +60,33 @@
     <Analyzer Include="C:\Program Files\Unity\Hub\Editor\2022.3.62f1\Editor\Data\Tools\Unity.SourceGenerators\Unity.Properties.SourceGenerator.dll" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Assets\_Project\Scripts\Physics\PhysicsSandboxMetrics.cs" />
+    <Compile Include="Assets\_Project\Scripts\Geometry\GemMeshType.cs" />
     <Compile Include="Assets\_Project\Scripts\Physics\GemstoneDefinition.cs" />
+    <Compile Include="Assets\_Project\Scripts\Physics\GemstoneVelocityLimiter.cs" />
+    <Compile Include="Assets\_Project\Scripts\Lighting\KaleidoscopeLightingRig.cs" />
     <Compile Include="Assets\_Project\Scripts\Physics\PhysicsSandboxBootstrap.cs" />
     <Compile Include="Assets\_Project\Scripts\Physics\KaleidoscopePhysicsChamber.cs" />
+    <Compile Include="Assets\_Project\Scripts\Physics\KaleidoscopeTubeChamberSettings.cs" />
     <Compile Include="Assets\TutorialInfo\Scripts\Readme.cs" />
+    <Compile Include="Assets\_Project\Scripts\Geometry\ProceduralGemMeshFactory.cs" />
+    <Compile Include="Assets\_Project\Scripts\Materials\GemstoneMaterialAssigner.cs" />
+    <Compile Include="Assets\_Project\Scripts\Lighting\LightingPreset.cs" />
+    <Compile Include="Assets\_Project\Scripts\Materials\GemstoneOpticalAnimator.cs" />
+    <Compile Include="Assets\_Project\Scripts\Geometry\GemGeometryAssigner.cs" />
+    <Compile Include="Assets\_Project\Scripts\Lighting\LightOrbitController.cs" />
     <Compile Include="Assets\_Project\Scripts\Physics\GemstoneMotionPersonality.cs" />
     <Compile Include="Assets\_Project\Scripts\Physics\GemstoneSpawner.cs" />
     <Compile Include="Assets\_Project\Scripts\Physics\PhysicsSandboxInput.cs" />
+    <Compile Include="Assets\_Project\Scripts\Materials\GemstoneMaterialProfile.cs" />
+    <Compile Include="Assets\_Project\Scripts\Materials\GemstoneMaterialBootstrap.cs" />
+    <Compile Include="Assets\_Project\Scripts\Geometry\GemColliderBuilder.cs" />
     <Compile Include="Assets\_Project\Scripts\Physics\GemstonePhysicsSetup.cs" />
     <Compile Include="Assets\_Project\Scripts\Physics\PhysicsSandboxDebugHUD.cs" />
+    <Compile Include="Assets\_Project\Scripts\Physics\PhysicsSandboxCameraController.cs" />
+    <Compile Include="Assets\_Project\Scripts\Physics\PhysicsSandboxChamberDebugView.cs" />
     <Compile Include="Assets\_Project\Scripts\Physics\GemstonePrimitiveFactory.cs" />
+    <Compile Include="Assets\_Project\Scripts\Geometry\GemGeometryProfile.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="UnityEngine">

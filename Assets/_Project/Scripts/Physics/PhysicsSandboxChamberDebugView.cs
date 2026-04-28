@@ -16,7 +16,8 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         [SerializeField] private Color colliderDebugColor = new Color(1f, 0.85f, 0.1f, 0.45f);
 
         private readonly List<Renderer> wallRenderers = new List<Renderer>();
-        private Renderer frontWallRenderer;
+        private Renderer frontCapRenderer;
+        private Renderer[] colliderRenderers;
         private Collider[] chamberColliders;
 
         public bool ShowChamberVisuals => showChamberVisuals;
@@ -45,6 +46,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         public void ToggleColliderDebug()
         {
             showCollidersDebug = !showCollidersDebug;
+            ApplyVisibility();
         }
 
         private void RefreshReferences()
@@ -53,14 +55,17 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             if (chamberTransform == null)
             {
                 chamberColliders = new Collider[0];
-                frontWallRenderer = null;
+                frontCapRenderer = null;
+                colliderRenderers = new Renderer[0];
                 return;
             }
 
             wallRenderers.AddRange(chamberTransform.GetComponentsInChildren<Renderer>(true));
             chamberColliders = chamberTransform.GetComponentsInChildren<Collider>(true);
-            Transform frontWall = chamberTransform.Find("FrontWall");
-            frontWallRenderer = frontWall != null ? frontWall.GetComponent<Renderer>() : null;
+            Transform frontCap = chamberTransform.Find("TubeColliders/FrontCap");
+            frontCapRenderer = frontCap != null ? frontCap.GetComponent<Renderer>() : null;
+            Transform colliderRoot = chamberTransform.Find("TubeColliders");
+            colliderRenderers = colliderRoot != null ? colliderRoot.GetComponentsInChildren<Renderer>(true) : new Renderer[0];
         }
 
         private void ApplyVisibility()
@@ -73,9 +78,17 @@ namespace KaleidoscopeEngine.PhysicsSandbox
                 }
             }
 
-            if (frontWallRenderer != null)
+            foreach (Renderer colliderRenderer in colliderRenderers)
             {
-                frontWallRenderer.enabled = showChamberVisuals && !cutawayMode;
+                if (colliderRenderer != null)
+                {
+                    colliderRenderer.enabled = showCollidersDebug;
+                }
+            }
+
+            if (frontCapRenderer != null)
+            {
+                frontCapRenderer.enabled = showChamberVisuals && !cutawayMode;
             }
         }
 

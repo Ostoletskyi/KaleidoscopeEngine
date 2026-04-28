@@ -1,4 +1,7 @@
 using System.Collections.Generic;
+using KaleidoscopeEngine.Geometry;
+using KaleidoscopeEngine.Lighting;
+using KaleidoscopeEngine.Materials;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -8,6 +11,23 @@ namespace KaleidoscopeEngine.PhysicsSandbox
     {
         private const string PhysicsSandboxSceneName = "01_PhysicsSandbox";
         private const string ChamberLayerName = "KaleidoscopeChamber";
+        private const float TubeRadius = 1.28f;
+        private const float TubeLength = 5.4f;
+        private const float TubeWallThickness = 0.16f;
+        private const float TubeCapThickness = 0.2f;
+        private const bool ShowFrontCap = false;
+        private const bool ShowBackCap = false;
+        private const bool ShowTubeVisual = true;
+        private const float TubeTransparency = 0.18f;
+        private const int TubeVisualSegments = 256;
+        private const int TubeColliderSegments = 48;
+        private static readonly bool InternalRibsEnabled = true;
+        private const int InternalRibCount = 5;
+        private const float InternalRibHeight = 0.12f;
+        private const float InternalRibWidth = 0.16f;
+        private static readonly bool ShowDepthGuideRings = true;
+        private const bool DebugColliderVisibility = false;
+        private static readonly Vector3 ChamberOuterSize = new Vector3(TubeLength, TubeRadius * 2f, TubeRadius * 2f);
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void BuildWhenSceneLoads()
@@ -35,18 +55,37 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             // Collision matrix recommendation: chamber collides with gem and micro particle;
             // gems and micro particles may collide with each other for Stage 1 visual richness.
             Physics.defaultSolverIterations = Mathf.Max(Physics.defaultSolverIterations, 10);
-            Physics.defaultSolverVelocityIterations = Mathf.Max(Physics.defaultSolverVelocityIterations, 4);
+            Physics.defaultSolverVelocityIterations = Mathf.Max(Physics.defaultSolverVelocityIterations, 6);
             Physics.defaultContactOffset = Mathf.Min(Physics.defaultContactOffset, 0.01f);
+            Physics.defaultMaxDepenetrationVelocity = Mathf.Min(Physics.defaultMaxDepenetrationVelocity, 3.5f);
 
             GameObject root = new GameObject("PhysicsSandboxRoot");
-            GameObject chamber = new GameObject("Chamber");
+            GameObject chamber = new GameObject("TubeChamber");
             chamber.transform.SetParent(root.transform, false);
+            KaleidoscopeTubeChamberSettings tubeSettings = chamber.AddComponent<KaleidoscopeTubeChamberSettings>();
+            tubeSettings.Configure(
+                TubeRadius,
+                TubeLength,
+                TubeWallThickness,
+                TubeCapThickness,
+                ShowFrontCap,
+                ShowBackCap,
+                ShowTubeVisual,
+                TubeTransparency,
+                TubeVisualSegments,
+                TubeColliderSegments,
+                InternalRibsEnabled,
+                InternalRibCount,
+                InternalRibHeight,
+                InternalRibWidth,
+                ShowDepthGuideRings,
+                DebugColliderVisibility);
 
-            BuildBoxChamber(chamber.transform);
+            BuildTubeChamber(chamber.transform);
 
             GameObject spawnVolume = new GameObject("SpawnVolume");
             spawnVolume.transform.SetParent(root.transform, false);
-            spawnVolume.transform.localPosition = new Vector3(0f, 0.55f, 0f);
+            spawnVolume.transform.localPosition = Vector3.zero;
 
             GameObject gemstoneParent = new GameObject("GemstoneParent");
             gemstoneParent.transform.SetParent(root.transform, false);
@@ -54,22 +93,42 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             KaleidoscopePhysicsChamber physicsChamber = root.AddComponent<KaleidoscopePhysicsChamber>();
             physicsChamber.SetChamberTransform(chamber.transform);
 
+            GemstoneMaterialAssigner materialAssigner = root.AddComponent<GemstoneMaterialAssigner>();
+            materialAssigner.SetProfiles(GemstoneMaterialBootstrap.CreateDefaultProfiles());
+
+            GemGeometryAssigner geometryAssigner = root.AddComponent<GemGeometryAssigner>();
+
             GemstoneSpawner spawner = root.AddComponent<GemstoneSpawner>();
             spawner.SetSpawnVolume(spawnVolume.transform);
             spawner.SetParentTransform(gemstoneParent.transform);
-            spawner.SpawnVolumeSize = new Vector3(3.4f, 1.9f, 3.4f);
+            spawner.SetMaterialAssigner(materialAssigner);
+            spawner.SetGeometryAssigner(geometryAssigner);
+            spawner.SpawnVolumeSize = new Vector3(TubeLength - TubeCapThickness * 3f, TubeRadius * 1.55f, TubeRadius * 1.55f);
+            spawner.SetCylindricalSpawnVolume(TubeRadius * 0.72f, TubeLength - TubeCapThickness * 3f);
             spawner.SetDefinitions(CreateRuntimeDefinitions());
+
+            PhysicsSandboxChamberDebugView debugView = root.AddComponent<PhysicsSandboxChamberDebugView>();
+            debugView.Configure(chamber.transform);
+
+            PhysicsSandboxMetrics metrics = root.AddComponent<PhysicsSandboxMetrics>();
+            metrics.ConfigureTube(spawner, chamber.transform, TubeRadius, TubeLength);
+
+            PhysicsSandboxCameraController cameraController = ConfigureCamera(chamber.transform);
+            KaleidoscopeLightingRig lightingRig = ConfigureReadableLighting(root.transform, chamber.transform);
 
             PhysicsSandboxInput input = root.AddComponent<PhysicsSandboxInput>();
             input.Configure(physicsChamber, spawner);
+            input.ConfigureDebugSystems(cameraController, debugView, metrics, materialAssigner, lightingRig, geometryAssigner);
 
-            PhysicsSandboxDebugHUD hud = root.AddComponent<PhysicsSandboxDebugHUD>();
+            GameObject hudObject = new GameObject("Debug HUD");
+            hudObject.transform.SetParent(root.transform, false);
+            PhysicsSandboxDebugHUD hud = hudObject.AddComponent<PhysicsSandboxDebugHUD>();
             hud.Configure(physicsChamber, spawner);
-
-            ConfigureCamera();
+            hud.ConfigureDebugSystems(cameraController, debugView, metrics, materialAssigner, lightingRig, geometryAssigner);
+            hud.ConfigureTubeSettings(tubeSettings);
         }
 
-        private static void BuildBoxChamber(Transform chamber)
+        private static void BuildTubeChamber(Transform chamber)
         {
             int chamberLayer = LayerMask.NameToLayer(ChamberLayerName);
             if (chamberLayer < 0)
@@ -77,31 +136,284 @@ namespace KaleidoscopeEngine.PhysicsSandbox
                 chamberLayer = 0;
             }
 
-            Vector3 size = new Vector3(4.2f, 2.6f, 4.2f);
-            float wall = 0.18f;
+            GameObject visualRoot = new GameObject("TubeVisual");
+            visualRoot.transform.SetParent(chamber, false);
+            visualRoot.SetActive(ShowTubeVisual);
 
-            CreateWall("Floor", chamber, chamberLayer, new Vector3(0f, -size.y * 0.5f, 0f), new Vector3(size.x, wall, size.z));
-            CreateWall("Ceiling", chamber, chamberLayer, new Vector3(0f, size.y * 0.5f, 0f), new Vector3(size.x, wall, size.z));
-            CreateWall("LeftWall", chamber, chamberLayer, new Vector3(-size.x * 0.5f, 0f, 0f), new Vector3(wall, size.y, size.z));
-            CreateWall("RightWall", chamber, chamberLayer, new Vector3(size.x * 0.5f, 0f, 0f), new Vector3(wall, size.y, size.z));
-            CreateWall("BackWall", chamber, chamberLayer, new Vector3(0f, 0f, size.z * 0.5f), new Vector3(size.x, size.y, wall));
-            CreateWall("FrontWall", chamber, chamberLayer, new Vector3(0f, 0f, -size.z * 0.5f), new Vector3(size.x, size.y, wall), true);
+            GameObject colliderRoot = new GameObject("TubeColliders");
+            colliderRoot.transform.SetParent(chamber, false);
+
+            CreateTubeVisual(visualRoot.transform, chamberLayer);
+            CreateDepthGuideRings(visualRoot.transform, chamberLayer);
+            CreateTubeWallColliders(colliderRoot.transform, chamberLayer);
+            CreateEndRingColliders(colliderRoot.transform, chamberLayer);
+            CreateInternalRibs(colliderRoot.transform, chamberLayer);
+            CreateTubeCap("FrontCap", colliderRoot.transform, chamberLayer, -TubeLength * 0.5f, ShowFrontCap, 0.035f);
+            CreateTubeCap("BackCap", colliderRoot.transform, chamberLayer, TubeLength * 0.5f, ShowBackCap, 0.09f);
         }
 
-        private static void CreateWall(string name, Transform parent, int layer, Vector3 localPosition, Vector3 localScale, bool transparent = false)
+        private static void CreateTubeVisual(Transform parent, int layer)
+        {
+            GameObject tube = new GameObject("Transparent Tube Shell");
+            tube.name = "Transparent Tube Shell";
+            tube.layer = layer;
+            tube.transform.SetParent(parent, false);
+
+            MeshFilter meshFilter = tube.AddComponent<MeshFilter>();
+            meshFilter.sharedMesh = CreateOpenTubeMesh(TubeRadius, TubeLength, TubeVisualSegments);
+
+            MeshRenderer renderer = tube.AddComponent<MeshRenderer>();
+            if (renderer != null)
+            {
+                Color color = new Color(0.58f, 0.82f, 1f, TubeTransparency);
+                renderer.sharedMaterial = CreateTransparentMaterial("Transparent Tube Shell", color);
+            }
+        }
+
+        private static Mesh CreateOpenTubeMesh(float radius, float length, int segments)
+        {
+            int safeSegments = Mathf.Max(32, segments);
+            Vector3[] vertices = new Vector3[(safeSegments + 1) * 2];
+            Vector3[] normals = new Vector3[vertices.Length];
+            Vector2[] uvs = new Vector2[vertices.Length];
+            int[] triangles = new int[safeSegments * 6];
+
+            for (int i = 0; i <= safeSegments; i++)
+            {
+                float u = i / (float)safeSegments;
+                float angle = u * Mathf.PI * 2f;
+                float y = Mathf.Cos(angle) * radius;
+                float z = Mathf.Sin(angle) * radius;
+                Vector3 normal = new Vector3(0f, Mathf.Cos(angle), Mathf.Sin(angle));
+
+                int front = i * 2;
+                int back = front + 1;
+                vertices[front] = new Vector3(-length * 0.5f, y, z);
+                vertices[back] = new Vector3(length * 0.5f, y, z);
+                normals[front] = normal;
+                normals[back] = normal;
+                uvs[front] = new Vector2(u, 0f);
+                uvs[back] = new Vector2(u, 1f);
+            }
+
+            for (int i = 0; i < safeSegments; i++)
+            {
+                int baseVertex = i * 2;
+                int nextBaseVertex = baseVertex + 2;
+                int triangle = i * 6;
+                triangles[triangle] = baseVertex;
+                triangles[triangle + 1] = nextBaseVertex;
+                triangles[triangle + 2] = baseVertex + 1;
+                triangles[triangle + 3] = baseVertex + 1;
+                triangles[triangle + 4] = nextBaseVertex;
+                triangles[triangle + 5] = nextBaseVertex + 1;
+            }
+
+            Mesh mesh = new Mesh
+            {
+                name = $"Open Tube Visual {safeSegments}"
+            };
+            mesh.vertices = vertices;
+            mesh.normals = normals;
+            mesh.uv = uvs;
+            mesh.triangles = triangles;
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        private static void CreateDepthGuideRings(Transform parent, int layer)
+        {
+            if (!ShowDepthGuideRings)
+            {
+                return;
+            }
+
+            float[] positions = { -1.8f, -0.6f, 0.6f, 1.8f };
+            Material material = CreateTransparentMaterial("Tube Depth Guide Rings", new Color(0.72f, 0.9f, 1f, 0.1f));
+            for (int i = 0; i < positions.Length; i++)
+            {
+                GameObject ring = new GameObject($"DepthGuideRing_{i:00}");
+                ring.layer = layer;
+                ring.transform.SetParent(parent, false);
+                ring.transform.localPosition = new Vector3(positions[i], 0f, 0f);
+
+                MeshFilter meshFilter = ring.AddComponent<MeshFilter>();
+                meshFilter.sharedMesh = CreateRingBandMesh(TubeRadius * 0.985f, 0.018f, TubeVisualSegments);
+                MeshRenderer renderer = ring.AddComponent<MeshRenderer>();
+                renderer.sharedMaterial = material;
+            }
+        }
+
+        private static Mesh CreateRingBandMesh(float radius, float thickness, int segments)
+        {
+            int safeSegments = Mathf.Max(32, segments);
+            Vector3[] vertices = new Vector3[(safeSegments + 1) * 2];
+            Vector3[] normals = new Vector3[vertices.Length];
+            int[] triangles = new int[safeSegments * 6];
+
+            for (int i = 0; i <= safeSegments; i++)
+            {
+                float angle = (i / (float)safeSegments) * Mathf.PI * 2f;
+                float y = Mathf.Cos(angle) * radius;
+                float z = Mathf.Sin(angle) * radius;
+                Vector3 normal = new Vector3(0f, Mathf.Cos(angle), Mathf.Sin(angle));
+
+                int front = i * 2;
+                int back = front + 1;
+                vertices[front] = new Vector3(-thickness * 0.5f, y, z);
+                vertices[back] = new Vector3(thickness * 0.5f, y, z);
+                normals[front] = normal;
+                normals[back] = normal;
+            }
+
+            for (int i = 0; i < safeSegments; i++)
+            {
+                int baseVertex = i * 2;
+                int nextBaseVertex = baseVertex + 2;
+                int triangle = i * 6;
+                triangles[triangle] = baseVertex;
+                triangles[triangle + 1] = baseVertex + 1;
+                triangles[triangle + 2] = nextBaseVertex;
+                triangles[triangle + 3] = baseVertex + 1;
+                triangles[triangle + 4] = nextBaseVertex + 1;
+                triangles[triangle + 5] = nextBaseVertex;
+            }
+
+            Mesh mesh = new Mesh
+            {
+                name = $"Tube Ring Band {safeSegments}"
+            };
+            mesh.vertices = vertices;
+            mesh.normals = normals;
+            mesh.triangles = triangles;
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        private static void CreateTubeWallColliders(Transform parent, int layer)
+        {
+            const float overlap = 1.22f;
+            int segmentCount = Mathf.Max(24, TubeColliderSegments);
+            float segmentWidth = (2f * Mathf.PI * (TubeRadius + TubeWallThickness * 0.5f)) / segmentCount * overlap;
+
+            for (int i = 0; i < segmentCount; i++)
+            {
+                float angle = i * (360f / segmentCount);
+                float radians = angle * Mathf.Deg2Rad;
+                Vector3 radial = new Vector3(0f, Mathf.Cos(radians), Mathf.Sin(radians));
+                Vector3 center = radial * (TubeRadius + TubeWallThickness * 0.5f);
+
+                CreateColliderBox(
+                    $"WallSegment_{i:00}",
+                    parent,
+                    layer,
+                    center,
+                    Quaternion.AngleAxis(angle, Vector3.right),
+                    new Vector3(TubeLength, TubeWallThickness, segmentWidth));
+            }
+        }
+
+        private static void CreateEndRingColliders(Transform parent, int layer)
+        {
+            int segmentCount = Mathf.Max(24, TubeColliderSegments);
+            float segmentWidth = (2f * Mathf.PI * (TubeRadius + TubeWallThickness * 0.5f)) / segmentCount * 1.28f;
+            float ringLength = TubeCapThickness * 2.6f;
+            float[] xPositions =
+            {
+                -TubeLength * 0.5f + TubeCapThickness * 0.35f,
+                TubeLength * 0.5f - TubeCapThickness * 0.35f
+            };
+
+            for (int side = 0; side < xPositions.Length; side++)
+            {
+                for (int i = 0; i < segmentCount; i++)
+                {
+                    float angle = i * (360f / segmentCount);
+                    float radians = angle * Mathf.Deg2Rad;
+                    Vector3 radial = new Vector3(0f, Mathf.Cos(radians), Mathf.Sin(radians));
+                    Vector3 center = new Vector3(xPositions[side], 0f, 0f) + radial * (TubeRadius + TubeWallThickness * 0.48f);
+
+                    CreateColliderBox(
+                        $"{(side == 0 ? "Front" : "Back")}EndRingSegment_{i:00}",
+                        parent,
+                        layer,
+                        center,
+                        Quaternion.AngleAxis(angle, Vector3.right),
+                        new Vector3(ringLength, TubeWallThickness * 1.35f, segmentWidth));
+                }
+            }
+        }
+
+        private static void CreateInternalRibs(Transform parent, int layer)
+        {
+            if (!InternalRibsEnabled)
+            {
+                return;
+            }
+
+            int ribCount = Mathf.Clamp(InternalRibCount, 0, 8);
+            if (ribCount <= 0)
+            {
+                return;
+            }
+
+            float ribLength = TubeLength - TubeCapThickness * 2.4f;
+            for (int i = 0; i < ribCount; i++)
+            {
+                float angle = i * (360f / ribCount);
+                float radians = angle * Mathf.Deg2Rad;
+                Vector3 radial = new Vector3(0f, Mathf.Cos(radians), Mathf.Sin(radians));
+                Vector3 center = radial * Mathf.Max(0.1f, TubeRadius - InternalRibHeight * 0.5f);
+
+                GameObject rib = CreateColliderBox(
+                    $"InternalRib_{i:00}",
+                    parent,
+                    layer,
+                    center,
+                    Quaternion.AngleAxis(angle, Vector3.right),
+                    new Vector3(ribLength, InternalRibHeight, InternalRibWidth));
+
+                Renderer renderer = rib.GetComponent<Renderer>();
+                if (renderer != null)
+                {
+                    renderer.sharedMaterial = CreateTransparentMaterial("Internal Rib Debug", new Color(0.9f, 0.95f, 1f, 0.12f));
+                }
+            }
+        }
+
+        private static void CreateTubeCap(string name, Transform parent, int layer, float xPosition, bool visible, float alpha)
+        {
+            GameObject cap = CreateColliderBox(
+                name,
+                parent,
+                layer,
+                new Vector3(xPosition, 0f, 0f),
+                Quaternion.identity,
+                new Vector3(TubeCapThickness, TubeRadius * 2f + TubeWallThickness * 2f, TubeRadius * 2f + TubeWallThickness * 2f));
+
+            Renderer renderer = cap.GetComponent<Renderer>();
+            if (renderer != null)
+            {
+                renderer.enabled = visible;
+                renderer.sharedMaterial = CreateTransparentMaterial(name, new Color(0.58f, 0.82f, 1f, alpha));
+            }
+        }
+
+        private static GameObject CreateColliderBox(string name, Transform parent, int layer, Vector3 localPosition, Quaternion localRotation, Vector3 localScale)
         {
             GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
             wall.name = name;
             wall.layer = layer;
             wall.transform.SetParent(parent, false);
             wall.transform.localPosition = localPosition;
+            wall.transform.localRotation = localRotation;
             wall.transform.localScale = localScale;
 
             Renderer renderer = wall.GetComponent<Renderer>();
             if (renderer != null)
             {
-                Color color = transparent ? new Color(0.66f, 0.9f, 1f, 0.2f) : new Color(0.45f, 0.55f, 0.62f, 0.18f);
-                renderer.sharedMaterial = CreateTransparentMaterial("Chamber Shell", color);
+                renderer.enabled = DebugColliderVisibility;
+                renderer.sharedMaterial = CreateTransparentMaterial("Tube Collider Debug", new Color(1f, 0.75f, 0.15f, 0.18f));
             }
 
             Collider collider = wall.GetComponent<Collider>();
@@ -109,27 +421,29 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             {
                 collider.sharedMaterial = new PhysicMaterial("Chamber High Friction")
                 {
-                    dynamicFriction = 0.82f,
-                    staticFriction = 0.95f,
+                    dynamicFriction = 0.9f,
+                    staticFriction = 1f,
                     bounciness = 0.03f,
                     frictionCombine = PhysicMaterialCombine.Maximum,
                     bounceCombine = PhysicMaterialCombine.Minimum
                 };
             }
+
+            return wall;
         }
 
         private static List<GemstoneDefinition> CreateRuntimeDefinitions()
         {
             return new List<GemstoneDefinition>
             {
-                Definition("opal", "Opal", GemstoneShapeHint.Rounded, new Color(0.74f, 0.95f, 1f, 0.78f), new Vector3(0.18f, 0.14f, 0.2f), new Vector3(0.36f, 0.28f, 0.38f), 0.11f, 0.32f, 0.86f, 0.06f, 1.2f, GemstoneParticleCategory.Gem),
-                Definition("ruby", "Ruby", GemstoneShapeHint.Faceted, new Color(0.85f, 0.04f, 0.08f, 0.9f), new Vector3(0.16f, 0.12f, 0.2f), new Vector3(0.34f, 0.24f, 0.44f), 0.16f, 0.56f, 0.72f, 0.08f, 1f, GemstoneParticleCategory.HeavyAnchor),
-                Definition("emerald", "Emerald", GemstoneShapeHint.Elongated, new Color(0.03f, 0.63f, 0.32f, 0.86f), new Vector3(0.14f, 0.22f, 0.14f), new Vector3(0.28f, 0.52f, 0.28f), 0.15f, 0.42f, 0.78f, 0.05f, 1f, GemstoneParticleCategory.Gem),
-                Definition("amethyst", "Amethyst", GemstoneShapeHint.Shard, new Color(0.48f, 0.18f, 0.86f, 0.88f), new Vector3(0.18f, 0.08f, 0.12f), new Vector3(0.48f, 0.2f, 0.32f), 0.09f, 0.28f, 0.96f, 0.04f, 1.1f, GemstoneParticleCategory.Gem),
-                Definition("quartz", "Quartz", GemstoneShapeHint.Shard, new Color(0.92f, 0.96f, 1f, 0.62f), new Vector3(0.15f, 0.08f, 0.1f), new Vector3(0.44f, 0.22f, 0.28f), 0.08f, 0.24f, 0.68f, 0.03f, 1f, GemstoneParticleCategory.Slider),
-                Definition("glass_fragment", "Glass Fragment", GemstoneShapeHint.ThinShard, new Color(0.65f, 0.92f, 1f, 0.5f), new Vector3(0.18f, 0.035f, 0.08f), new Vector3(0.52f, 0.08f, 0.22f), 0.03f, 0.12f, 0.55f, 0.02f, 0.9f, GemstoneParticleCategory.GlassFragment),
-                Definition("micro_particle", "Micro Particle", GemstoneShapeHint.Pebble, new Color(0.82f, 0.82f, 0.86f, 0.78f), new Vector3(0.035f, 0.025f, 0.035f), new Vector3(0.095f, 0.07f, 0.095f), 0.006f, 0.03f, 1.05f, 0.01f, 3.1f, GemstoneParticleCategory.MicroParticle),
-                Definition("dust", "Dust", GemstoneShapeHint.Pebble, new Color(0.7f, 0.73f, 0.78f, 0.62f), new Vector3(0.018f, 0.014f, 0.018f), new Vector3(0.042f, 0.032f, 0.042f), 0.002f, 0.008f, 1.25f, 0f, 1.8f, GemstoneParticleCategory.Dust)
+                Definition("opal", "Opal", GemstoneShapeHint.Rounded, new Color(0.94f, 0.98f, 1f, 1f), new Vector3(0.18f, 0.14f, 0.2f), new Vector3(0.36f, 0.28f, 0.38f), 0.11f, 0.32f, 0.86f, 0.06f, 1.2f, GemstoneParticleCategory.Gem),
+                Definition("ruby", "Ruby", GemstoneShapeHint.Faceted, new Color(1f, 0.03f, 0.06f, 1f), new Vector3(0.16f, 0.12f, 0.2f), new Vector3(0.34f, 0.24f, 0.44f), 0.16f, 0.56f, 0.72f, 0.08f, 1f, GemstoneParticleCategory.HeavyAnchor),
+                Definition("emerald", "Emerald", GemstoneShapeHint.Elongated, new Color(0.02f, 0.9f, 0.32f, 1f), new Vector3(0.14f, 0.22f, 0.14f), new Vector3(0.28f, 0.52f, 0.28f), 0.15f, 0.42f, 0.78f, 0.05f, 1f, GemstoneParticleCategory.Gem),
+                Definition("amethyst", "Amethyst", GemstoneShapeHint.Shard, new Color(0.58f, 0.18f, 1f, 1f), new Vector3(0.18f, 0.08f, 0.12f), new Vector3(0.48f, 0.2f, 0.32f), 0.09f, 0.28f, 0.96f, 0.04f, 1.1f, GemstoneParticleCategory.Gem),
+                Definition("quartz", "Quartz", GemstoneShapeHint.Shard, new Color(1f, 1f, 1f, 0.96f), new Vector3(0.15f, 0.08f, 0.1f), new Vector3(0.44f, 0.22f, 0.28f), 0.08f, 0.24f, 0.68f, 0.03f, 1f, GemstoneParticleCategory.Slider),
+                Definition("glass_fragment", "Glass Fragment", GemstoneShapeHint.ThinShard, new Color(0.45f, 0.95f, 1f, 0.92f), new Vector3(0.18f, 0.035f, 0.08f), new Vector3(0.52f, 0.08f, 0.22f), 0.03f, 0.12f, 0.55f, 0.02f, 0.9f, GemstoneParticleCategory.GlassFragment),
+                Definition("micro_particle", "Micro Particle", GemstoneShapeHint.Pebble, new Color(0.82f, 0.84f, 0.88f, 1f), new Vector3(0.035f, 0.025f, 0.035f), new Vector3(0.095f, 0.07f, 0.095f), 0.006f, 0.03f, 1.05f, 0.01f, 3.1f, GemstoneParticleCategory.MicroParticle),
+                Definition("dust", "Dust", GemstoneShapeHint.Pebble, new Color(0.68f, 0.7f, 0.74f, 1f), new Vector3(0.018f, 0.014f, 0.018f), new Vector3(0.042f, 0.032f, 0.042f), 0.002f, 0.008f, 1.25f, 0f, 1.8f, GemstoneParticleCategory.Dust)
             };
         }
 
@@ -260,11 +574,26 @@ namespace KaleidoscopeEngine.PhysicsSandbox
                 material.SetFloat("_AlphaCutoffEnable", 0f);
             }
 
+            if (material.HasProperty("_Smoothness"))
+            {
+                material.SetFloat("_Smoothness", 0.2f);
+            }
+
+            if (material.HasProperty("_DoubleSidedEnable"))
+            {
+                material.SetFloat("_DoubleSidedEnable", 1f);
+            }
+
+            if (material.HasProperty("_CullMode"))
+            {
+                material.SetFloat("_CullMode", 0f);
+            }
+
             material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
             return material;
         }
 
-        private static void ConfigureCamera()
+        private static PhysicsSandboxCameraController ConfigureCamera(Transform target)
         {
             Camera camera = Camera.main;
             if (camera == null)
@@ -274,9 +603,69 @@ namespace KaleidoscopeEngine.PhysicsSandbox
                 camera = cameraObject.AddComponent<Camera>();
             }
 
-            camera.transform.position = new Vector3(0f, 2.25f, -6.3f);
-            camera.transform.rotation = Quaternion.Euler(17f, 0f, 0f);
-            camera.fieldOfView = 45f;
+            PhysicsSandboxCameraController controller = camera.GetComponent<PhysicsSandboxCameraController>();
+            if (controller == null)
+            {
+                controller = camera.gameObject.AddComponent<PhysicsSandboxCameraController>();
+            }
+
+            controller.Configure(camera, target);
+            return controller;
+        }
+
+        private static KaleidoscopeLightingRig ConfigureReadableLighting(Transform root, Transform target)
+        {
+            GameObject lightingRoot = new GameObject("Optical Lighting Rig");
+            lightingRoot.transform.SetParent(root, false);
+            KaleidoscopeLightingRig rig = lightingRoot.AddComponent<KaleidoscopeLightingRig>();
+            rig.Configure(target);
+
+            bool hasDirectionalLight = false;
+            bool hasFillLight = false;
+            Light[] lights = Object.FindObjectsOfType<Light>();
+            foreach (Light light in lights)
+            {
+                if (light.type == LightType.Directional)
+                {
+                    hasDirectionalLight = true;
+                    light.transform.rotation = Quaternion.Euler(48f, -32f, 0f);
+                    light.intensity = Mathf.Max(light.intensity, 2.2f);
+                    light.color = new Color(1f, 0.96f, 0.9f);
+                    light.shadows = LightShadows.None;
+                    light.transform.SetParent(lightingRoot.transform, true);
+                }
+
+                if (light.name == "Soft Fill Light")
+                {
+                    hasFillLight = true;
+                }
+            }
+
+            if (!hasDirectionalLight)
+            {
+                GameObject mainLight = new GameObject("Main Directional Light");
+                Light main = mainLight.AddComponent<Light>();
+                main.type = LightType.Directional;
+                main.transform.rotation = Quaternion.Euler(48f, -32f, 0f);
+                main.intensity = 2.2f;
+                main.color = new Color(1f, 0.96f, 0.9f);
+                mainLight.transform.SetParent(lightingRoot.transform, true);
+            }
+
+            if (hasFillLight)
+            {
+                return rig;
+            }
+
+            GameObject fillLight = new GameObject("Soft Fill Light");
+            Light fill = fillLight.AddComponent<Light>();
+            fill.type = LightType.Point;
+            fill.transform.position = new Vector3(-2.8f, 2.2f, -3.2f);
+            fill.range = 8f;
+            fill.intensity = 1.15f;
+            fill.color = new Color(0.66f, 0.82f, 1f);
+            fillLight.transform.SetParent(lightingRoot.transform, true);
+            return rig;
         }
     }
 }

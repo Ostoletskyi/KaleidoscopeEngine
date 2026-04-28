@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using KaleidoscopeEngine.Geometry;
+using KaleidoscopeEngine.Materials;
 using UnityEngine;
 
 namespace KaleidoscopeEngine.PhysicsSandbox
@@ -16,6 +18,9 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         [Header("Spawn Volume")]
         [SerializeField] private Transform spawnVolume;
         [SerializeField] private Vector3 spawnVolumeSize = new Vector3(3.8f, 2.2f, 3.8f);
+        [SerializeField] private bool spawnInsideCylinder;
+        [SerializeField] private float cylinderRadius = 1.15f;
+        [SerializeField] private float cylinderLength = 4.8f;
         [SerializeField] private int placementAttemptsPerObject = 20;
         [SerializeField] private float overlapPadding = 0.9f;
         [SerializeField] private AnimationCurve verticalDensity = AnimationCurve.EaseInOut(0f, 0.2f, 1f, 1f);
@@ -29,6 +34,12 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
         [Header("Hierarchy")]
         [SerializeField] private Transform parentTransform;
+
+        [Header("Materials")]
+        [SerializeField] private GemstoneMaterialAssigner materialAssigner;
+
+        [Header("Geometry")]
+        [SerializeField] private GemGeometryAssigner geometryAssigner;
 
         [Header("Layers")]
         [Tooltip("Layer names are expected in ProjectSettings/TagManager.asset. Falls back to Default if missing.")]
@@ -45,6 +56,13 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         {
             get => spawnVolumeSize;
             set => spawnVolumeSize = value;
+        }
+
+        public void SetCylindricalSpawnVolume(float radius, float length)
+        {
+            spawnInsideCylinder = true;
+            cylinderRadius = Mathf.Max(0.1f, radius);
+            cylinderLength = Mathf.Max(0.1f, length);
         }
 
         private void Start()
@@ -69,6 +87,16 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         public void SetParentTransform(Transform parent)
         {
             parentTransform = parent;
+        }
+
+        public void SetMaterialAssigner(GemstoneMaterialAssigner assigner)
+        {
+            materialAssigner = assigner;
+        }
+
+        public void SetGeometryAssigner(GemGeometryAssigner assigner)
+        {
+            geometryAssigner = assigner;
         }
 
         public void Spawn()
@@ -106,6 +134,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
                 float radius = EstimateRadius(definition);
                 instance.transform.position = FindSpawnPosition(radius);
                 instance.transform.rotation = RandomRotation();
+                geometryAssigner?.ApplyTo(instance, definition, activeSeed + i * 92821);
 
                 GemstonePhysicsSetup setup = instance.GetComponent<GemstonePhysicsSetup>();
                 if (setup == null)
@@ -114,6 +143,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
                 }
 
                 setup.Configure(definition, random, gemLayer, microLayer);
+                materialAssigner?.ApplyTo(instance);
                 instance.SetActive(true);
                 spawnedObjects.Add(instance);
             }
@@ -125,6 +155,8 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             {
                 if (spawnedObjects[i] != null)
                 {
+                    geometryAssigner?.Release(spawnedObjects[i]);
+                    materialAssigner?.Release(spawnedObjects[i]);
                     Destroy(spawnedObjects[i]);
                 }
             }
@@ -204,10 +236,12 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
             for (int attempt = 0; attempt < placementAttemptsPerObject; attempt++)
             {
-                Vector3 local = new Vector3(
-                    RandomClusteredAxis(halfSize.x),
-                    RandomVerticalAxis(halfSize.y),
-                    RandomClusteredAxis(halfSize.z));
+                Vector3 local = spawnInsideCylinder
+                    ? RandomPointInCylinder(radius)
+                    : new Vector3(
+                        RandomClusteredAxis(halfSize.x),
+                        RandomVerticalAxis(halfSize.y),
+                        RandomClusteredAxis(halfSize.z));
 
                 Vector3 world = volume.TransformPoint(local);
                 if (!Physics.CheckSphere(world, radius * overlapPadding, checkMask, QueryTriggerInteraction.Ignore))
@@ -216,11 +250,26 @@ namespace KaleidoscopeEngine.PhysicsSandbox
                 }
             }
 
-            Vector3 fallback = new Vector3(
-                RandomClusteredAxis(halfSize.x),
-                RandomVerticalAxis(halfSize.y),
-                RandomClusteredAxis(halfSize.z));
+            Vector3 fallback = spawnInsideCylinder
+                ? RandomPointInCylinder(radius)
+                : new Vector3(
+                    RandomClusteredAxis(halfSize.x),
+                    RandomVerticalAxis(halfSize.y),
+                    RandomClusteredAxis(halfSize.z));
             return volume.TransformPoint(fallback);
+        }
+
+        private Vector3 RandomPointInCylinder(float objectRadius)
+        {
+            float safeRadius = Mathf.Max(0.05f, cylinderRadius - objectRadius * 1.35f);
+            float angle = RandomRange(0f, Mathf.PI * 2f);
+            float radial = Mathf.Sqrt(Mathf.Clamp01((float)random.NextDouble())) * safeRadius;
+            float x = RandomRange(-cylinderLength * 0.5f, cylinderLength * 0.5f);
+
+            return new Vector3(
+                x,
+                Mathf.Cos(angle) * radial,
+                Mathf.Sin(angle) * radial);
         }
 
         private Quaternion RandomRotation()

@@ -13,9 +13,26 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         [SerializeField] private float maxTiltDegrees = 28f;
         [SerializeField] private float tiltResponsiveness = 5f;
 
-        [Header("Rotation")]
-        [SerializeField] private float maxManualRotationSpeed = 75f;
-        [SerializeField] private float passiveRotationSpeed = 4f;
+        [Header("Axial Tube Rotation")]
+        [SerializeField] private bool axialRotationEnabled = true;
+        [SerializeField] private float axialRotationSpeed = 12f;
+        [SerializeField] private float axialRotationDirection = 1f;
+        [SerializeField] private float minSpeed = -600f;
+        [SerializeField] private float maxSpeed = 600f;
+        [SerializeField] private float acceleration = 22f;
+        [SerializeField] private float damping = 3.5f;
+
+        [Header("World Rotation")]
+        [SerializeField] private bool worldRotationEnabled;
+        [SerializeField] private float maxManualWorldRotationSpeed = 45f;
+        [SerializeField] private float passiveWorldRotationSpeed;
+
+        [Header("Future Turbine Placeholder")]
+        [SerializeField] private bool turbineModeEnabled;
+        [SerializeField] private int turbineBladeCount = 12;
+        [SerializeField] private float turbineSpinSpeed = 720f;
+        // Future turbine mode will spin entrance blades against 24/48/72 fps multiples
+        // to create a stroboscopic cyclic effect. This is intentionally not implemented in Stage 1.
 
         [Header("Procedural Drift")]
         [SerializeField] private bool proceduralDrift = true;
@@ -39,14 +56,24 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         private Vector3 initialPosition;
         private Vector2 targetTiltInput;
         private Vector2 currentTiltInput;
-        private float requestedRotationSpeed;
-        private float accumulatedSpin;
+        private float requestedWorldRotationSpeed;
+        private float accumulatedWorldSpin;
+        private float targetAxialRotationSpeed;
+        private float currentAxialRotationSpeed;
+        private float accumulatedAxialSpin;
         private float shakeTimer;
         private float shakeStrength;
         private Rigidbody chamberBody;
 
         public Vector2 CurrentTiltInput => currentTiltInput;
-        public float RequestedRotationSpeed => requestedRotationSpeed;
+        public float RequestedRotationSpeed => requestedWorldRotationSpeed;
+        public bool AxialRotationEnabled => axialRotationEnabled;
+        public float AxialRotationSpeed => axialRotationSpeed;
+        public float CurrentAxialRotationSpeed => currentAxialRotationSpeed;
+        public bool WorldRotationEnabled => worldRotationEnabled;
+        public bool TurbineModeEnabled => turbineModeEnabled;
+        public int TurbineBladeCount => turbineBladeCount;
+        public float TurbineSpinSpeed => turbineSpinSpeed;
         public float ShakeStrength => shakeTimer > 0f ? shakeStrength : 0f;
 
         private Transform ChamberTransform => chamberTransform != null ? chamberTransform : transform;
@@ -71,13 +98,23 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         {
             float dt = Time.fixedDeltaTime;
             currentTiltInput = Vector2.Lerp(currentTiltInput, targetTiltInput, 1f - Mathf.Exp(-tiltResponsiveness * dt));
-            accumulatedSpin += (passiveRotationSpeed + requestedRotationSpeed * maxManualRotationSpeed) * dt;
+
+            targetAxialRotationSpeed = axialRotationEnabled ? axialRotationSpeed * Mathf.Sign(Mathf.Approximately(axialRotationDirection, 0f) ? 1f : axialRotationDirection) : 0f;
+            float speedResponse = axialRotationEnabled ? acceleration : damping;
+            currentAxialRotationSpeed = Mathf.MoveTowards(currentAxialRotationSpeed, targetAxialRotationSpeed, speedResponse * dt);
+            accumulatedAxialSpin += currentAxialRotationSpeed * dt;
+
+            if (worldRotationEnabled)
+            {
+                accumulatedWorldSpin += (passiveWorldRotationSpeed + requestedWorldRotationSpeed * maxManualWorldRotationSpeed) * dt;
+            }
 
             Quaternion tilt = Quaternion.Euler(
                 currentTiltInput.y * maxTiltDegrees,
                 0f,
                 -currentTiltInput.x * maxTiltDegrees);
-            Quaternion spin = Quaternion.AngleAxis(accumulatedSpin, Vector3.up);
+            Quaternion worldSpin = Quaternion.AngleAxis(accumulatedWorldSpin, Vector3.up);
+            Quaternion axialSpin = Quaternion.AngleAxis(accumulatedAxialSpin, Vector3.right);
 
             Vector3 driftPosition = Vector3.zero;
             Quaternion driftRotation = Quaternion.identity;
@@ -126,7 +163,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
             MoveChamber(
                 initialPosition + driftPosition + vibrationPosition + shakePosition,
-                initialRotation * tilt * driftRotation * spin * vibrationRotation * shakeRotation);
+                initialRotation * worldSpin * tilt * driftRotation * axialSpin * vibrationRotation * shakeRotation);
         }
 
         public void Tilt(Vector2 input)
@@ -136,7 +173,27 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
         public void Rotate(float speed)
         {
-            requestedRotationSpeed = Mathf.Clamp(speed, -1f, 1f);
+            requestedWorldRotationSpeed = Mathf.Clamp(speed, -1f, 1f);
+        }
+
+        public void AdjustAxialRotationSpeed(float delta)
+        {
+            axialRotationSpeed = Mathf.Clamp(axialRotationSpeed + delta, minSpeed, maxSpeed);
+        }
+
+        public void ToggleAxialRotation()
+        {
+            axialRotationEnabled = !axialRotationEnabled;
+        }
+
+        public void SetAxialRotationEnabled(bool enabled)
+        {
+            axialRotationEnabled = enabled;
+        }
+
+        public void ToggleWorldRotation()
+        {
+            worldRotationEnabled = !worldRotationEnabled;
         }
 
         public void Shake(float strength)
@@ -149,8 +206,10 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         {
             targetTiltInput = Vector2.zero;
             currentTiltInput = Vector2.zero;
-            requestedRotationSpeed = 0f;
-            accumulatedSpin = 0f;
+            requestedWorldRotationSpeed = 0f;
+            accumulatedWorldSpin = 0f;
+            accumulatedAxialSpin = 0f;
+            currentAxialRotationSpeed = 0f;
             shakeTimer = 0f;
             shakeStrength = 0f;
             MoveChamber(initialPosition, initialRotation);

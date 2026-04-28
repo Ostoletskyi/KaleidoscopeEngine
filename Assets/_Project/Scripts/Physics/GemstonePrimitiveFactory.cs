@@ -1,3 +1,4 @@
+using KaleidoscopeEngine.Geometry;
 using UnityEngine;
 
 namespace KaleidoscopeEngine.PhysicsSandbox
@@ -6,37 +7,32 @@ namespace KaleidoscopeEngine.PhysicsSandbox
     {
         public static GameObject CreatePrimitive(GemstoneDefinition definition)
         {
-            PrimitiveType primitiveType = definition.shapeHint switch
-            {
-                GemstoneShapeHint.Rounded => PrimitiveType.Sphere,
-                GemstoneShapeHint.Pebble => PrimitiveType.Sphere,
-                GemstoneShapeHint.Elongated => PrimitiveType.Capsule,
-                _ => PrimitiveType.Cube
-            };
+            GameObject root = new GameObject(definition.displayName);
+            Mesh mesh = ProceduralGemMeshFactory.CreateMesh(ResolveMeshType(definition), definition.id != null ? definition.id.GetHashCode() : 17);
 
-            GameObject root = GameObject.CreatePrimitive(primitiveType);
-            ApplyShapeScale(root.transform, definition.shapeHint);
+            MeshFilter meshFilter = root.AddComponent<MeshFilter>();
+            meshFilter.sharedMesh = mesh;
 
-            Renderer renderer = root.GetComponent<Renderer>();
-            if (renderer != null)
-            {
-                renderer.sharedMaterial = CreatePlaceholderMaterial(definition);
-            }
+            MeshRenderer renderer = root.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = CreatePlaceholderMaterial(definition);
+
+            MeshCollider meshCollider = root.AddComponent<MeshCollider>();
+            meshCollider.sharedMesh = mesh;
+            meshCollider.convex = true;
 
             return root;
         }
 
-        private static void ApplyShapeScale(Transform transform, GemstoneShapeHint shapeHint)
+        private static GemMeshType ResolveMeshType(GemstoneDefinition definition)
         {
-            transform.localScale = shapeHint switch
-            {
-                GemstoneShapeHint.Faceted => new Vector3(1f, 0.75f, 1.25f),
-                GemstoneShapeHint.Elongated => new Vector3(0.72f, 1.35f, 0.72f),
-                GemstoneShapeHint.Shard => new Vector3(1.25f, 0.5f, 0.72f),
-                GemstoneShapeHint.ThinShard => new Vector3(1.55f, 0.18f, 0.62f),
-                GemstoneShapeHint.Pebble => new Vector3(1f, 0.7f, 0.85f),
-                _ => new Vector3(1f, 0.88f, 1.12f)
-            };
+            string id = definition.id != null ? definition.id.ToLowerInvariant() : string.Empty;
+            if (id.Contains("opal")) return GemMeshType.OpalPebble;
+            if (id.Contains("ruby")) return GemMeshType.RubyFaceted;
+            if (id.Contains("emerald")) return GemMeshType.EmeraldPrism;
+            if (id.Contains("amethyst")) return GemMeshType.AmethystShard;
+            if (id.Contains("quartz")) return GemMeshType.QuartzShard;
+            if (id.Contains("glass")) return GemMeshType.GlassFragment;
+            return GemMeshType.MicroCrystal;
         }
 
         private static Material CreatePlaceholderMaterial(GemstoneDefinition definition)
@@ -54,7 +50,12 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
             if (material.HasProperty("_Smoothness"))
             {
-                material.SetFloat("_Smoothness", 0.58f);
+                material.SetFloat("_Smoothness", 0.82f);
+            }
+
+            if (material.HasProperty("_Metallic"))
+            {
+                material.SetFloat("_Metallic", 0f);
             }
 
             return material;

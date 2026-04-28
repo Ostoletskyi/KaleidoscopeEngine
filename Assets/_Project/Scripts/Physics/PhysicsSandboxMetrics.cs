@@ -12,6 +12,9 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
         [Header("Bounds")]
         [SerializeField] private Vector3 chamberInnerSize = new Vector3(4.2f, 2.6f, 4.2f);
+        [SerializeField] private bool useTubeBounds;
+        [SerializeField] private float tubeRadius = 1.28f;
+        [SerializeField] private float tubeLength = 5.4f;
         [SerializeField] private float escapeTolerance = 0.45f;
         [SerializeField] private bool tintEscapedObjects = true;
         [SerializeField] private Color escapedColor = new Color(1f, 0.82f, 0.05f, 1f);
@@ -32,6 +35,16 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             spawner = gemstoneSpawner;
             chamberTransform = chamber;
             chamberInnerSize = innerSize;
+            useTubeBounds = false;
+        }
+
+        public void ConfigureTube(GemstoneSpawner gemstoneSpawner, Transform chamber, float radius, float length)
+        {
+            spawner = gemstoneSpawner;
+            chamberTransform = chamber;
+            tubeRadius = Mathf.Max(0.1f, radius);
+            tubeLength = Mathf.Max(0.1f, length);
+            useTubeBounds = true;
         }
 
         private void Update()
@@ -109,6 +122,13 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             }
 
             Vector3 local = chamberTransform.InverseTransformPoint(worldPosition);
+            if (useTubeBounds)
+            {
+                float radialDistance = new Vector2(local.y, local.z).magnitude;
+                return Mathf.Abs(local.x) > tubeLength * 0.5f + escapeTolerance ||
+                       radialDistance > tubeRadius + escapeTolerance;
+            }
+
             Vector3 half = chamberInnerSize * 0.5f + Vector3.one * escapeTolerance;
             return Mathf.Abs(local.x) > half.x ||
                    Mathf.Abs(local.y) > half.y ||

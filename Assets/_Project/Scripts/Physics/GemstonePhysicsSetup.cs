@@ -10,9 +10,12 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
         [Header("Fallback Defaults")]
         [SerializeField] private float defaultDrag = 0.05f;
-        [SerializeField] private float defaultAngularDrag = 0.65f;
-        [SerializeField] private float microParticleDrag = 0.16f;
-        [SerializeField] private float microParticleAngularDrag = 0.9f;
+        [SerializeField] private float defaultAngularDrag = 0.9f;
+        [SerializeField] private float microParticleDrag = 0.22f;
+        [SerializeField] private float microParticleAngularDrag = 1.2f;
+        [SerializeField] private float maxLinearVelocity = 5.5f;
+        [SerializeField] private float maxAngularVelocity = 8f;
+        [SerializeField] private float maxDepenetrationVelocity = 3.5f;
 
         private Rigidbody body;
 
@@ -55,9 +58,9 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             body.useGravity = true;
             body.interpolation = RigidbodyInterpolation.Interpolate;
             body.sleepThreshold = definition.sleepThreshold;
-            body.collisionDetectionMode = definition.IsMicroParticle
-                ? CollisionDetectionMode.Discrete
-                : CollisionDetectionMode.ContinuousDynamic;
+            body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+            body.maxAngularVelocity = maxAngularVelocity;
+            body.maxDepenetrationVelocity = maxDepenetrationVelocity;
 
             body.centerOfMass = RandomVector(
                 random,
@@ -73,6 +76,14 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             {
                 body.velocity += impulse * RandomRange(random, definition.spawnImpulseRange.x, definition.spawnImpulseRange.y) / body.mass;
             }
+
+            GemstoneVelocityLimiter limiter = GetComponent<GemstoneVelocityLimiter>();
+            if (limiter == null)
+            {
+                limiter = gameObject.AddComponent<GemstoneVelocityLimiter>();
+            }
+
+            limiter.Configure(body, maxLinearVelocity, maxAngularVelocity);
         }
 
         private void EnsureCollider(GemstoneDefinition gemstoneDefinition)
