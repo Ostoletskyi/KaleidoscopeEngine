@@ -1,0 +1,21 @@
+﻿{
+    "ProjectPath":  "C:\\Projects\\CLIPS\\Caleidoscope\\Caleidoscope",
+    "GitRemoteUrl":  "",
+    "DefaultBranch":  "main",
+    "ConflictStrategy":  "manual",
+    "CodexCommand":  "",
+    "IgnoreFolders":  [
+                          ".git",
+                          "node_modules",
+                          "bin",
+                          "obj",
+                          "dist",
+                          "build",
+                          ".vs",
+                          ".idea",
+                          ".vscode"
+                      ],
+    "LogPath":  "C:\\Projects\\CLIPS\\Caleidoscope\\Caleidoscope\\logs",
+    "ConfirmSafeOperations":  true,
+    "AutoFetchBeforeGitAnalysis":  true
+}

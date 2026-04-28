@@ -1,0 +1,19 @@
+{
+  "ProjectPath": "C:\\Projects\\ExampleProject",
+  "GitRemoteUrl": "https://github.com/example/example.git",
+  "DefaultBranch": "main",
+  "ConflictStrategy": "manual",
+  "CodexCommand": "codex",
+  "IgnoreFolders": [
+    ".git",
+    "node_modules",
+    "bin",
+    "obj",
+    "dist",
+    "build"
+  ],
+  "LogPath": "C:\\Projects\\ProjectOpsUtility\\logs",
+  "ConfirmSafeOperations": true,
+  "AutoFetchBeforeGitAnalysis": true
+}
+

@@ -1,0 +1,20 @@
+﻿C:\Users\ostol\ProjectOpsUtility
+  [D] config
+    [F] config.json
+  [D] docs
+    [F] sample-config.json
+  [D] logs
+    [F] utility_20260318.log
+  [F] main.ps1
+  [D] modules
+    [F] CodexTools.psm1
+    [F] Common.psm1
+    [F] Config.psm1
+    [F] Diagnostics.psm1
+    [F] GitTools.psm1
+    [F] MapTools.psm1
+    [F] Menu.psm1
+    [F] OperationPreview.psm1
+  [D] output
+  [F] README.md
+  [F] run.bat

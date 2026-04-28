@@ -1,18 +1,45 @@
-[Ll]ibrary/
-[Tt]emp/
-[Oo]bj/
-[Bb]uild/
-[Bb]uilds/
-[Ll]ogs/
-[Uu]ser[Ss]ettings/
+# Unity Cache / Generated
+Library/
+Temp/
+Obj/
+Build/
+Builds/
+Logs/
+UserSettings/
+MemoryCaptures/
+Recordings/
 
-.vs/
+# Unity Addressables / Cache
+ServerData/
+
+# Crash / Diagnostics
+crashlytics-build.properties
+
+# Unity auto-generated
+*.apk
+*.aab
+*.unitypackage
+
+# Addressables / AssetBundles
+Assets/StreamingAssets/aa/
+
+# Cache server
+Cache/
+
+# Rider / VS additional
+.idea/
 .vscode/
-*.csproj
-*.sln
-*.user
-*.pidb
-*.booproj
-*.svd
-*.pdb
-*.mdb
+
+# Backup files (часто забывают)
+*.bak
+*.backup
+*.old
+*.orig
+
+# Large temporary exports
+*.zip
+*.rar
+*.7z
+
+# OS
+ehthumbs.dbv
