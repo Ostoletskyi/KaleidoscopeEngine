@@ -370,7 +370,7 @@ namespace KaleidoscopeEngine.UI
         {
             if (Pressed(KeyCode.F1))
             {
-                helpOverlay?.Toggle();
+                KaleidoscopeHelpOverlay.ToggleRuntimeOverlay(helpOverlay);
             }
 
             if (Pressed(KeyCode.F2))

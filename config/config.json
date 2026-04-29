@@ -1,9 +1,9 @@
 ﻿{
     "ProjectPath":  "C:\\Projects\\CLIPS\\Caleidoscope\\Caleidoscope",
-    "GitRemoteUrl":  "",
+    "GitRemoteUrl":  "https://github.com/Ostoletskyi/KaleidoscopeEngine",
     "DefaultBranch":  "main",
     "ConflictStrategy":  "manual",
-    "CodexCommand":  "",
+    "CodexCommand":  "codex",
     "IgnoreFolders":  [
                           ".git",
                           "node_modules",

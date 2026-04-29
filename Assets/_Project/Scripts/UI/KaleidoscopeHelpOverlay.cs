@@ -45,8 +45,41 @@ namespace KaleidoscopeEngine.UI
         private float fade;
         private string feedbackText;
         private float feedbackUntil;
+        private const float RuntimeToggleDebounceSeconds = 0.08f;
+        private static int lastRuntimeToggleFrame = -1;
+        private static float lastRuntimeToggleRealtime = -100f;
 
         public bool Visible => visible;
+
+        public static bool ToggleRuntimeOverlay(KaleidoscopeHelpOverlay preferredOverlay = null)
+        {
+            if (!Application.isPlaying)
+            {
+                return false;
+            }
+
+            int currentFrame = Time.frameCount;
+            float currentRealtime = Time.realtimeSinceStartup;
+            if (currentFrame == lastRuntimeToggleFrame || currentRealtime - lastRuntimeToggleRealtime < RuntimeToggleDebounceSeconds)
+            {
+                return true;
+            }
+
+            KaleidoscopeHelpOverlay overlay = preferredOverlay != null
+                ? preferredOverlay
+                : FindObjectOfType<KaleidoscopeHelpOverlay>();
+
+            if (overlay == null)
+            {
+                Debug.LogWarning("Runtime help overlay requested, but no KaleidoscopeHelpOverlay exists in the active scene.");
+                return false;
+            }
+
+            lastRuntimeToggleFrame = currentFrame;
+            lastRuntimeToggleRealtime = currentRealtime;
+            overlay.Toggle();
+            return true;
+        }
 
         public void Configure(
             KaleidoscopeRenderPipeline pipeline,
