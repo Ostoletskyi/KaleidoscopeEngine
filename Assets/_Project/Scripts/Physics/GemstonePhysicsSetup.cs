@@ -22,7 +22,13 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         public GemstoneDefinition Definition => definition;
         public Rigidbody Body => body;
 
-        public void Configure(GemstoneDefinition gemstoneDefinition, System.Random random, int gemLayer, int microParticleLayer)
+        public void Configure(
+            GemstoneDefinition gemstoneDefinition,
+            System.Random random,
+            int gemLayer,
+            int microParticleLayer,
+            float scaleMultiplier = 1f,
+            float maxVisibleScaleAxis = 0.5f)
         {
             definition = gemstoneDefinition;
 
@@ -35,7 +41,17 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             gameObject.layer = definition.IsMicroParticle ? microParticleLayer : gemLayer;
             ApplyLayerToChildren(transform, gameObject.layer);
 
-            transform.localScale = RandomVector(random, definition.minScale, definition.maxScale);
+            Vector3 chosenScale = RandomVector(random, definition.minScale, definition.maxScale) * Mathf.Max(0.01f, scaleMultiplier);
+            if (maxVisibleScaleAxis > 0f)
+            {
+                float largestAxis = Mathf.Max(chosenScale.x, chosenScale.y, chosenScale.z);
+                if (largestAxis > maxVisibleScaleAxis)
+                {
+                    chosenScale *= maxVisibleScaleAxis / largestAxis;
+                }
+            }
+
+            transform.localScale = chosenScale;
 
             EnsureCollider(definition);
             ConfigureRigidbody(random);

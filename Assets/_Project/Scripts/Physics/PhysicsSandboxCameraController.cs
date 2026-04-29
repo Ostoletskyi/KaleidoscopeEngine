@@ -12,6 +12,9 @@ namespace KaleidoscopeEngine.PhysicsSandbox
     [DisallowMultipleComponent]
     public sealed class PhysicsSandboxCameraController : MonoBehaviour
     {
+        // DebugCamera / OrbitCamera role: this controller is for inspecting the
+        // physical tube, lights, source chamber, and colliders. It is not the
+        // default eyepiece presentation; KaleidoscopeRenderPipeline owns that.
         [Header("References")]
         [SerializeField] private Camera targetCamera;
         [SerializeField] private Transform target;
@@ -123,6 +126,14 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             yawDegrees = staticYawDegrees;
             pitchDegrees = 0f;
             panOffset = Vector3.zero;
+            ApplyCameraPose(true);
+        }
+
+        public void SetDebugOrbitView()
+        {
+            cameraMode = PhysicsSandboxCameraMode.DebugSide;
+            yawDegrees = debugSideYawDegrees;
+            pitchDegrees = debugSidePitchDegrees;
             ApplyCameraPose(true);
         }
 

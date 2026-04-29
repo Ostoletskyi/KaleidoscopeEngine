@@ -27,6 +27,7 @@ namespace KaleidoscopeEngine.FX
         [SerializeField] private float cameraAngleInfluence = 0.65f;
         [SerializeField] private float lightAngleInfluence = 0.8f;
         [SerializeField] private int maxActiveSparkles = 36;
+        [SerializeField] private string opticalFxLayerName = "KaleidoscopeOpticalFX";
 
         private readonly List<Sparkle> sparkles = new List<Sparkle>();
         private readonly List<Renderer> renderers = new List<Renderer>();
@@ -58,6 +59,14 @@ namespace KaleidoscopeEngine.FX
         public void AdjustSparkleIntensity(float delta)
         {
             sparkleIntensity = Mathf.Clamp(sparkleIntensity + delta, 0f, 3f);
+        }
+
+        public void SetOpticalFxLayerName(string layerName)
+        {
+            if (!string.IsNullOrWhiteSpace(layerName))
+            {
+                opticalFxLayerName = layerName;
+            }
         }
 
         private void Awake()
@@ -108,6 +117,7 @@ namespace KaleidoscopeEngine.FX
             {
                 GameObject sparkleObject = GameObject.CreatePrimitive(PrimitiveType.Quad);
                 sparkleObject.name = $"Gem Sparkle_{sparkles.Count:00}";
+                sparkleObject.layer = ResolveLayer(opticalFxLayerName);
                 sparkleObject.transform.SetParent(transform, false);
                 sparkleObject.SetActive(false);
 
@@ -317,6 +327,12 @@ namespace KaleidoscopeEngine.FX
             {
                 material.SetFloat(propertyName, value);
             }
+        }
+
+        private static int ResolveLayer(string layerName)
+        {
+            int layer = LayerMask.NameToLayer(layerName);
+            return layer >= 0 ? layer : 0;
         }
 
         private sealed class Sparkle

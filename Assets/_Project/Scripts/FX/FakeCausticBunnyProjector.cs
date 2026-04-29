@@ -27,6 +27,7 @@ namespace KaleidoscopeEngine.FX
         [SerializeField] private bool reactToAxialRotation = true;
         [SerializeField] private float tubeRadius = 1.18f;
         [SerializeField] private float tubeLength = 5.1f;
+        [SerializeField] private string opticalFxLayerName = "KaleidoscopeOpticalFX";
 
         private readonly List<CausticSpot> spots = new List<CausticSpot>();
         private Material spotMaterial;
@@ -49,6 +50,14 @@ namespace KaleidoscopeEngine.FX
         {
             causticsEnabled = !causticsEnabled;
             ApplyVisibility();
+        }
+
+        public void SetOpticalFxLayerName(string layerName)
+        {
+            if (!string.IsNullOrWhiteSpace(layerName))
+            {
+                opticalFxLayerName = layerName;
+            }
         }
 
         private void Awake()
@@ -118,6 +127,7 @@ namespace KaleidoscopeEngine.FX
             {
                 GameObject spotObject = GameObject.CreatePrimitive(PrimitiveType.Quad);
                 spotObject.name = $"Fake Caustic Bunny_{spots.Count:00}";
+                spotObject.layer = ResolveLayer(opticalFxLayerName);
                 spotObject.transform.SetParent(attachToTubeInterior && tube != null ? tube : transform, false);
 
                 Collider collider = spotObject.GetComponent<Collider>();
@@ -212,6 +222,12 @@ namespace KaleidoscopeEngine.FX
             {
                 material.SetFloat(propertyName, value);
             }
+        }
+
+        private static int ResolveLayer(string layerName)
+        {
+            int layer = LayerMask.NameToLayer(layerName);
+            return layer >= 0 ? layer : 0;
         }
 
         private sealed class CausticSpot

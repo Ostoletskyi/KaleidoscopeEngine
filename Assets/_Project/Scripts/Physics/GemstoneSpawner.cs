@@ -12,8 +12,12 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         [SerializeField] private List<GemstoneDefinition> definitions = new List<GemstoneDefinition>();
 
         [Header("Counts")]
-        [Min(0)] public int totalCount = 64;
-        [Range(0f, 0.9f)] public float microParticleRatio = 0.28f;
+        [Min(0)] public int totalCount = 148;
+        [Range(0f, 0.9f)] public float microParticleRatio = 0.56f;
+        [SerializeField, Min(0)] private int mediumShardCount = 52;
+        private const int DefaultTotalCount = 156;
+        private const float DefaultMicroParticleRatio = 0.58f;
+        private const int DefaultMediumShardCount = 52;
 
         [Header("Spawn Volume")]
         [SerializeField] private Transform spawnVolume;
@@ -25,6 +29,26 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         [SerializeField] private float overlapPadding = 0.9f;
         [SerializeField] private AnimationCurve verticalDensity = AnimationCurve.EaseInOut(0f, 0.2f, 1f, 1f);
         [SerializeField] private float centerClustering = 0.35f;
+
+        [Header("Mosaic Density")]
+        [SerializeField, Range(0f, 1f)] private float microCrystalDensity = 0.62f;
+        [SerializeField, Range(0f, 1f)] private float densityDistribution = 0.72f;
+        [SerializeField, Range(0f, 0.4f)] private float visualNoiseAmount = 0.08f;
+        [SerializeField, Range(0f, 1f)] private float shardSizeVariance = 0.42f;
+        private const float DefaultMicroCrystalDensity = 0.62f;
+        private const float DefaultDensityDistribution = 0.72f;
+        private const float DefaultVisualNoiseAmount = 0.08f;
+        private const float DefaultShardSizeVariance = 0.42f;
+
+        [Header("Scale Rebalance")]
+        [SerializeField, Range(0.25f, 1.25f)] private float dominantGemScaleMultiplier = 0.78f;
+        [SerializeField, Range(0.25f, 1.5f)] private float mediumGemScaleMultiplier = 0.92f;
+        [SerializeField, Range(0.25f, 2f)] private float microGemScaleMultiplier = 1.18f;
+        [SerializeField, Range(0.12f, 0.8f)] private float maxVisibleGemArea = 0.38f;
+        private const float DefaultDominantGemScaleMultiplier = 0.78f;
+        private const float DefaultMediumGemScaleMultiplier = 0.92f;
+        private const float DefaultMicroGemScaleMultiplier = 1.18f;
+        private const float DefaultMaxVisibleGemArea = 0.38f;
 
         [Header("Randomization")]
         [Tooltip("0 or less means a new random seed each respawn. Positive values are deterministic.")]
@@ -49,9 +73,16 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         private readonly List<GameObject> spawnedObjects = new List<GameObject>();
         private System.Random random;
         private int activeSeed;
+        private int dominantGemCount;
 
         public IReadOnlyList<GameObject> SpawnedObjects => spawnedObjects;
         public int ActiveSeed => activeSeed;
+        public int MediumShardCount => mediumShardCount;
+        public float MicroCrystalDensity => microCrystalDensity;
+        public float DensityDistribution => densityDistribution;
+        public float VisualNoiseAmount => visualNoiseAmount;
+        public float DominantGemRatio => spawnedObjects.Count > 0 ? dominantGemCount / (float)spawnedObjects.Count : 0f;
+        public float OpticalDensity => Mathf.Clamp01(totalCount / 180f * 0.42f + microCrystalDensity * 0.36f + mediumShardCount / 80f * 0.22f);
         public Vector3 SpawnVolumeSize
         {
             get => spawnVolumeSize;
@@ -99,6 +130,19 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             geometryAssigner = assigner;
         }
 
+        public void SetLayerNames(string gemLayer, string microParticleLayer)
+        {
+            if (!string.IsNullOrWhiteSpace(gemLayer))
+            {
+                gemLayerName = gemLayer;
+            }
+
+            if (!string.IsNullOrWhiteSpace(microParticleLayer))
+            {
+                microParticleLayerName = microParticleLayer;
+            }
+        }
+
         public void Spawn()
         {
             if (clearBeforeSpawn)
@@ -117,11 +161,15 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
             int gemLayer = ResolveLayer(gemLayerName);
             int microLayer = ResolveLayer(microParticleLayerName);
+            dominantGemCount = 0;
+            microParticleRatio = Mathf.Clamp01(Mathf.Max(microParticleRatio, microCrystalDensity));
+            int targetMediumShards = Mathf.Clamp(mediumShardCount, 0, totalCount);
 
             for (int i = 0; i < totalCount; i++)
             {
                 bool wantMicro = random.NextDouble() < microParticleRatio;
-                GemstoneDefinition definition = PickDefinition(wantMicro);
+                bool wantMediumShard = !wantMicro && i < targetMediumShards;
+                GemstoneDefinition definition = PickDefinition(wantMicro, wantMediumShard);
                 if (definition == null)
                 {
                     continue;
@@ -142,10 +190,16 @@ namespace KaleidoscopeEngine.PhysicsSandbox
                     setup = instance.AddComponent<GemstonePhysicsSetup>();
                 }
 
-                setup.Configure(definition, random, gemLayer, microLayer);
+                float scaleMultiplier = ResolveScaleMultiplier(definition) * ResolveShardVariance(definition);
+                setup.Configure(definition, random, gemLayer, microLayer, scaleMultiplier, maxVisibleGemArea);
                 materialAssigner?.ApplyTo(instance);
                 instance.SetActive(true);
                 spawnedObjects.Add(instance);
+
+                if (IsDominantDefinition(definition, instance.transform.localScale))
+                {
+                    dominantGemCount++;
+                }
             }
         }
 
@@ -169,12 +223,41 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             Spawn();
         }
 
-        private GemstoneDefinition PickDefinition(bool preferMicro)
+        public void AdjustOpticalDensity(int countDelta)
+        {
+            totalCount = Mathf.Clamp(totalCount + countDelta, 48, 240);
+            mediumShardCount = Mathf.Clamp(mediumShardCount + Mathf.RoundToInt(countDelta * 0.45f), 8, totalCount);
+            microCrystalDensity = Mathf.Clamp01(microCrystalDensity + Mathf.Sign(countDelta) * 0.025f);
+            microParticleRatio = Mathf.Clamp(microParticleRatio + Mathf.Sign(countDelta) * 0.025f, 0.1f, 0.85f);
+            Respawn();
+        }
+
+        public void ResetMosaicDefaults(bool respawn)
+        {
+            totalCount = DefaultTotalCount;
+            microParticleRatio = DefaultMicroParticleRatio;
+            mediumShardCount = DefaultMediumShardCount;
+            microCrystalDensity = DefaultMicroCrystalDensity;
+            densityDistribution = DefaultDensityDistribution;
+            visualNoiseAmount = DefaultVisualNoiseAmount;
+            shardSizeVariance = DefaultShardSizeVariance;
+            dominantGemScaleMultiplier = DefaultDominantGemScaleMultiplier;
+            mediumGemScaleMultiplier = DefaultMediumGemScaleMultiplier;
+            microGemScaleMultiplier = DefaultMicroGemScaleMultiplier;
+            maxVisibleGemArea = DefaultMaxVisibleGemArea;
+
+            if (respawn)
+            {
+                Respawn();
+            }
+        }
+
+        private GemstoneDefinition PickDefinition(bool preferMicro, bool preferMediumShard)
         {
             float totalWeight = 0f;
             for (int i = 0; i < definitions.Count; i++)
             {
-                bool categoryMatches = CategoryMatches(definitions[i], preferMicro);
+                bool categoryMatches = CategoryMatches(definitions[i], preferMicro, preferMediumShard);
                 if (categoryMatches)
                 {
                     totalWeight += definitions[i].spawnWeight;
@@ -192,7 +275,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             float roll = (float)random.NextDouble() * totalWeight;
             for (int i = 0; i < definitions.Count; i++)
             {
-                bool categoryMatches = totalWeight <= 0f || CategoryMatches(definitions[i], preferMicro);
+                bool categoryMatches = totalWeight <= 0f || CategoryMatches(definitions[i], preferMicro, preferMediumShard);
                 if (!categoryMatches)
                 {
                     continue;
@@ -208,11 +291,18 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             return definitions[definitions.Count - 1];
         }
 
-        private static bool CategoryMatches(GemstoneDefinition definition, bool preferMicro)
+        private static bool CategoryMatches(GemstoneDefinition definition, bool preferMicro, bool preferMediumShard)
         {
             if (preferMicro)
             {
                 return definition.IsMicroParticle;
+            }
+
+            if (preferMediumShard)
+            {
+                return definition.particleCategory == GemstoneParticleCategory.Gem ||
+                    definition.particleCategory == GemstoneParticleCategory.Slider ||
+                    definition.particleCategory == GemstoneParticleCategory.GlassFragment;
             }
 
             return !definition.IsMicroParticle;
@@ -263,8 +353,14 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         {
             float safeRadius = Mathf.Max(0.05f, cylinderRadius - objectRadius * 1.35f);
             float angle = RandomRange(0f, Mathf.PI * 2f);
-            float radial = Mathf.Sqrt(Mathf.Clamp01((float)random.NextDouble())) * safeRadius;
-            float x = RandomRange(-cylinderLength * 0.5f, cylinderLength * 0.5f);
+            float radialRoll = Mathf.Clamp01((float)random.NextDouble());
+            float uniformRadial = Mathf.Sqrt(radialRoll);
+            float layeredRadial = Mathf.Pow(radialRoll, Mathf.Lerp(0.45f, 1.65f, densityDistribution));
+            float radial = Mathf.Lerp(uniformRadial, layeredRadial, densityDistribution) * safeRadius;
+            float uniformX = RandomRange(-cylinderLength * 0.5f, cylinderLength * 0.5f);
+            float layeredX = (RandomRange(-cylinderLength * 0.5f, cylinderLength * 0.5f) +
+                RandomRange(-cylinderLength * 0.5f, cylinderLength * 0.5f)) * 0.5f;
+            float x = Mathf.Lerp(uniformX, layeredX, densityDistribution);
 
             return new Vector3(
                 x,
@@ -282,8 +378,47 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
         private float EstimateRadius(GemstoneDefinition definition)
         {
-            Vector3 scale = Vector3.Lerp(definition.minScale, definition.maxScale, 0.5f);
+            Vector3 scale = Vector3.Lerp(definition.minScale, definition.maxScale, 0.5f) * ResolveScaleMultiplier(definition);
             return Mathf.Max(scale.x, scale.y, scale.z) * 0.55f;
+        }
+
+        private float ResolveScaleMultiplier(GemstoneDefinition definition)
+        {
+            if (definition == null)
+            {
+                return 1f;
+            }
+
+            if (definition.particleCategory == GemstoneParticleCategory.HeavyAnchor)
+            {
+                return dominantGemScaleMultiplier;
+            }
+
+            if (definition.IsMicroParticle)
+            {
+                return microGemScaleMultiplier;
+            }
+
+            return mediumGemScaleMultiplier;
+        }
+
+        private float ResolveShardVariance(GemstoneDefinition definition)
+        {
+            float variance = definition != null && definition.IsMicroParticle ? shardSizeVariance * 0.55f : shardSizeVariance;
+            float min = Mathf.Lerp(1f, 0.72f, variance);
+            float max = Mathf.Lerp(1f, 1.18f, variance);
+            return RandomRange(min, max);
+        }
+
+        private static bool IsDominantDefinition(GemstoneDefinition definition, Vector3 scale)
+        {
+            if (definition == null)
+            {
+                return false;
+            }
+
+            float largestAxis = Mathf.Max(scale.x, scale.y, scale.z);
+            return definition.particleCategory == GemstoneParticleCategory.HeavyAnchor || largestAxis > 0.42f;
         }
 
         private float RandomRange(float min, float max)

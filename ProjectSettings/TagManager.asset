@@ -17,13 +17,13 @@ TagManager:
   - KaleidoscopeChamber
   - KaleidoscopeGem
   - KaleidoscopeMicroParticle
-  - 
-  - 
-  - 
-  - 
-  - 
-  - 
-  - 
+  - KaleidoscopeGems
+  - KaleidoscopeParticles
+  - KaleidoscopeOpticalFX
+  - KaleidoscopeChamberVisual
+  - KaleidoscopePhysicsOnly
+  - KaleidoscopeDebug
+  - KaleidoscopeDisplay
   - 
   - 
   - 
