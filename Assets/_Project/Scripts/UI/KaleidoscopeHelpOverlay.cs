@@ -176,7 +176,13 @@ namespace KaleidoscopeEngine.UI
                 new HelpRow("F3", "Full debug", "Detailed system readout"),
                 new HelpRow("F4", "Hide debug UI", "Clean composition"),
                 new HelpRow("F5", "Reset tuning", "Restore visual defaults"),
-                new HelpRow("F6", "Screenshot", "Capture current eyepiece")
+                new HelpRow("F6", "Screenshot", "Capture current eyepiece"),
+                new HelpRow("F7 / F8", "Quality", "Step fidelity down or up"),
+                new HelpRow("Shift + F7 / F8", "Quality extremes", "Jump to Minimal or Extreme"),
+                new HelpRow("F9", "Adaptive quality", "Toggle FPS governor"),
+                new HelpRow("Shift + F9", "Auto-balance", "Toggle recovery tuning"),
+                new HelpRow("F10 / F11", "Performance preset", "Step budget down or up"),
+                new HelpRow("F12", "Safe mode", "Force emergency recovery")
             };
         }
 

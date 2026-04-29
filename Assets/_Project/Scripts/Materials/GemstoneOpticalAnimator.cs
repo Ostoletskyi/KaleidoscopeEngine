@@ -11,16 +11,28 @@ namespace KaleidoscopeEngine.Materials
 
         [Header("Animation")]
         [SerializeField] private bool sparkleEnabled = true;
-        [SerializeField] private float shimmerSpeed = 1.6f;
-        [SerializeField] private float shimmerAmount = 0.08f;
-        [SerializeField] private float emissionPulseAmount = 0.25f;
+        [SerializeField] private float shimmerSpeed = 0.42f;
+        [SerializeField] private float shimmerAmount = 0.045f;
+        [SerializeField] private float emissionPulseAmount = 0.12f;
         [SerializeField] private float noiseScale = 3.7f;
         [SerializeField] private float lightReactionStrength = 0.65f;
+
+        [Header("Temporal Stability")]
+        [SerializeField, Range(1f, 30f)] private float materialUpdateRate = 12f;
+        [SerializeField, Range(0f, 1f)] private float highlightPersistence = 0.78f;
+        [SerializeField, Range(0f, 1f)] private float subpixelStability = 0.65f;
 
         private MaterialPropertyBlock propertyBlock;
         private Color baseColor;
         private Color emissionColor;
         private float phase;
+        private float nextMaterialUpdateTime;
+        private float smoothedSparkle;
+        private Color smoothedBaseColor;
+        private Color smoothedEmissionColor;
+        private Color smoothedSpecularColor;
+        private float smoothedSmoothness;
+        private float smoothedCoat;
         private Light[] lights;
 
         public float CurrentSparkle { get; private set; }
@@ -49,6 +61,13 @@ namespace KaleidoscopeEngine.Materials
                 return;
             }
 
+            if (Time.unscaledTime < nextMaterialUpdateTime)
+            {
+                return;
+            }
+
+            nextMaterialUpdateTime = Time.unscaledTime + 1f / Mathf.Max(1f, materialUpdateRate);
+
             EnsurePropertyBlock();
 
             float lightExposure = EstimateLightExposure();
@@ -58,7 +77,9 @@ namespace KaleidoscopeEngine.Materials
                 transform.position.z * noiseScale - Time.time * shimmerSpeed * 0.31f);
 
             float profileSparkle = GetProfileSparkleMultiplier();
-            CurrentSparkle = Mathf.Clamp01(glint * profile.sparkleStrength * profile.sparkleResponse * profileSparkle * lightExposure);
+            float targetSparkle = Mathf.Clamp01(glint * profile.sparkleStrength * profile.sparkleResponse * profileSparkle * lightExposure * Mathf.Lerp(1f, 0.58f, subpixelStability));
+            smoothedSparkle = Mathf.Lerp(smoothedSparkle, targetSparkle, 1f - highlightPersistence * 0.86f);
+            CurrentSparkle = smoothedSparkle;
             Color pearlyTint = GetProfileScatterTint() * Mathf.Clamp01(profile.internalScatterStrength);
             Color highlightTint = GetProfileHighlightTint();
             Color animatedBase = Color.Lerp(baseColor, pearlyTint, profile.fakeDispersion * (0.25f + CurrentSparkle * 0.5f));
@@ -70,13 +91,19 @@ namespace KaleidoscopeEngine.Materials
                 (profile.useEmission ? profile.emissionStrength * (1f + CurrentSparkle * emissionPulseAmount * profile.emissionPulseStrength) : 0f);
             animatedEmission += GetProfileReactiveGlow(CurrentSparkle, lightExposure);
 
+            smoothedBaseColor = Color.Lerp(smoothedBaseColor == default ? animatedBase : smoothedBaseColor, animatedBase, 1f - highlightPersistence * 0.72f);
+            smoothedEmissionColor = Color.Lerp(smoothedEmissionColor, animatedEmission, 1f - highlightPersistence * 0.8f);
+            smoothedSpecularColor = Color.Lerp(smoothedSpecularColor == default ? animatedSpecular : smoothedSpecularColor, animatedSpecular, 1f - highlightPersistence * 0.72f);
+            smoothedSmoothness = Mathf.Lerp(smoothedSmoothness <= 0f ? profile.smoothness : smoothedSmoothness, Mathf.Clamp01(profile.smoothness + shimmer * profile.roughnessVariation), 1f - highlightPersistence * 0.72f);
+            smoothedCoat = Mathf.Lerp(smoothedCoat, GetProfileCoat(CurrentSparkle), 1f - highlightPersistence * 0.72f);
+
             targetRenderer.GetPropertyBlock(propertyBlock);
-            SetColor("_BaseColor", animatedBase);
-            SetColor("_Color", animatedBase);
-            SetColor("_EmissiveColor", animatedEmission);
-            SetColor("_SpecularColor", animatedSpecular);
-            SetFloat("_Smoothness", Mathf.Clamp01(profile.smoothness + shimmer * profile.roughnessVariation));
-            SetFloat("_CoatMask", GetProfileCoat(CurrentSparkle));
+            SetColor("_BaseColor", smoothedBaseColor);
+            SetColor("_Color", smoothedBaseColor);
+            SetColor("_EmissiveColor", smoothedEmissionColor);
+            SetColor("_SpecularColor", smoothedSpecularColor);
+            SetFloat("_Smoothness", smoothedSmoothness);
+            SetFloat("_CoatMask", smoothedCoat);
             targetRenderer.SetPropertyBlock(propertyBlock);
         }
 

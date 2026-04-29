@@ -4,6 +4,7 @@ using KaleidoscopeEngine.Geometry;
 using KaleidoscopeEngine.Lighting;
 using KaleidoscopeEngine.Materials;
 using KaleidoscopeEngine.Mirrors;
+using KaleidoscopeEngine.Performance;
 using KaleidoscopeEngine.UI;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -123,6 +124,9 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             spawner.SetCylindricalSpawnVolume(TubeRadius * 0.82f, TubeLength - TubeCapThickness * 3f);
             spawner.SetDefinitions(CreateRuntimeDefinitions());
 
+            EntropyCompressionVolume entropyCompression = root.AddComponent<EntropyCompressionVolume>();
+            entropyCompression.Configure(chamber.transform, spawner, TubeRadius, TubeLength, PhysicsOnlyLayerName);
+
             PhysicsSandboxChamberDebugView debugView = root.AddComponent<PhysicsSandboxChamberDebugView>();
             debugView.Configure(chamber.transform);
 
@@ -136,6 +140,9 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             OpticalSourceChamber opticalSourceChamber = ConfigureOpticalSourceChamber(root.transform, chamber.transform);
             KaleidoscopeMirrorController mirrorController = root.AddComponent<KaleidoscopeMirrorController>();
             KaleidoscopeRenderPipeline mirrorPipeline = ConfigureMirrorPipeline(root.transform, mirrorController, opticalSourceChamber);
+            mirrorPipeline.ConfigureQualityTargets(spawner, sparkleController);
+            spawner.SetSourceVisibilityCamera(mirrorPipeline.SourceCamera);
+            sparkleController.ApplyVisibleSparkleTarget(spawner.VisibleSparkleTarget);
 
             PhysicsSandboxInput input = root.AddComponent<PhysicsSandboxInput>();
             input.Configure(physicsChamber, spawner);
@@ -143,7 +150,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             debugPanelObject.transform.SetParent(root.transform, false);
             KaleidoscopeDebugPanel debugPanel = debugPanelObject.AddComponent<KaleidoscopeDebugPanel>();
             debugPanel.Configure(physicsChamber, spawner);
-            debugPanel.ConfigureDebugSystems(cameraController, debugView, metrics, materialAssigner, lightingRig, geometryAssigner, sparkleController, causticProjector, mirrorPipeline, mirrorController, opticalSourceChamber);
+            debugPanel.ConfigureDebugSystems(cameraController, debugView, metrics, materialAssigner, lightingRig, geometryAssigner, sparkleController, causticProjector, mirrorPipeline, mirrorController, opticalSourceChamber, entropyCompression);
             debugPanel.ConfigureTubeSettings(tubeSettings);
 
             input.ConfigureDebugSystems(cameraController, debugView, metrics, materialAssigner, lightingRig, geometryAssigner, sparkleController, causticProjector, mirrorPipeline, mirrorController, debugPanel, opticalSourceChamber);
@@ -152,6 +159,12 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             operatorConsoleObject.transform.SetParent(root.transform, false);
             KaleidoscopeHelpOverlay helpOverlay = operatorConsoleObject.AddComponent<KaleidoscopeHelpOverlay>();
             helpOverlay.Configure(mirrorPipeline, mirrorController, spawner);
+            GameObject performanceObject = new GameObject("Kaleidoscope Performance Governor");
+            performanceObject.transform.SetParent(root.transform, false);
+            KaleidoscopeFpsMonitor fpsMonitor = performanceObject.AddComponent<KaleidoscopeFpsMonitor>();
+            AdaptiveQualityController adaptiveQuality = performanceObject.AddComponent<AdaptiveQualityController>();
+            adaptiveQuality.Configure(fpsMonitor, mirrorPipeline, spawner, sparkleController, causticProjector, physicsChamber, helpOverlay);
+            debugPanel.ConfigurePerformanceSystems(fpsMonitor, adaptiveQuality);
             KaleidoscopeInputRouter inputRouter = operatorConsoleObject.AddComponent<KaleidoscopeInputRouter>();
             inputRouter.Configure(
                 physicsChamber,
@@ -162,7 +175,8 @@ namespace KaleidoscopeEngine.PhysicsSandbox
                 mirrorPipeline.ViewerCameraController,
                 debugPanel,
                 helpOverlay,
-                opticalSourceChamber);
+                opticalSourceChamber,
+                adaptiveQuality);
         }
 
         private static void BuildTubeChamber(Transform chamber)

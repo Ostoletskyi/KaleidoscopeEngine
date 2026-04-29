@@ -69,7 +69,9 @@ namespace KaleidoscopeEngine.EditorTools
                     new HelpRow("F3", "Full debug", "Detailed system readout"),
                     new HelpRow("F4", "Hide debug UI", "Clean composition"),
                     new HelpRow("F5", "Reset tuning", "Restore visual defaults"),
-                    new HelpRow("F6", "Screenshot", "Capture current eyepiece")
+                    new HelpRow("F6", "Screenshot", "Capture current eyepiece"),
+                    new HelpRow("F7 / F8", "Quality", "Step fidelity down or up"),
+                    new HelpRow("Shift + F7 / F8", "Quality extremes", "Jump to Minimal or Extreme")
                 }
             }
         };

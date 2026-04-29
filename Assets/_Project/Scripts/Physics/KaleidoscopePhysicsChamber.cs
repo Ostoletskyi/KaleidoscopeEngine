@@ -19,8 +19,11 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         [SerializeField] private float axialRotationDirection = 1f;
         [SerializeField] private float minSpeed = -600f;
         [SerializeField] private float maxSpeed = 600f;
-        [SerializeField] private float acceleration = 22f;
-        [SerializeField] private float damping = 3.5f;
+        [SerializeField] private float acceleration = 10f;
+        [SerializeField] private float damping = 5f;
+        [SerializeField, Range(0.1f, 3f)] private float angularSmoothing = 0.55f;
+        [SerializeField, Range(0.5f, 8f)] private float rotationalMass = 3.2f;
+        [SerializeField, Range(0f, 1f)] private float opticalMomentum = 0.72f;
 
         [Header("World Rotation")]
         [SerializeField] private bool worldRotationEnabled;
@@ -44,7 +47,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         [SerializeField] private bool microVibration = true;
         [SerializeField] private float vibrationRotationDegrees = 0.18f;
         [SerializeField] private float vibrationPositionAmplitude = 0.004f;
-        [SerializeField] private float vibrationFrequency = 19f;
+        [SerializeField] private float vibrationFrequency = 6f;
 
         [Header("Shake")]
         [SerializeField] private float shakeDuration = 0.28f;
@@ -64,11 +67,16 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         private float shakeTimer;
         private float shakeStrength;
         private Rigidbody chamberBody;
+        private float adaptiveAxialSpeedCap = -1f;
 
         public Vector2 CurrentTiltInput => currentTiltInput;
         public float RequestedRotationSpeed => requestedWorldRotationSpeed;
         public bool AxialRotationEnabled => axialRotationEnabled;
         public float AxialRotationSpeed => axialRotationSpeed;
+        public float EffectiveAxialRotationSpeedCap => adaptiveAxialSpeedCap >= 0f ? adaptiveAxialSpeedCap : maxSpeed;
+        public float AngularSmoothing => angularSmoothing;
+        public float RotationalMass => rotationalMass;
+        public float OpticalMomentum => opticalMomentum;
         public float CurrentAxialRotationSpeed => currentAxialRotationSpeed;
         public bool WorldRotationEnabled => worldRotationEnabled;
         public bool TurbineModeEnabled => turbineModeEnabled;
@@ -99,9 +107,13 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             float dt = Time.fixedDeltaTime;
             currentTiltInput = Vector2.Lerp(currentTiltInput, targetTiltInput, 1f - Mathf.Exp(-tiltResponsiveness * dt));
 
-            targetAxialRotationSpeed = axialRotationEnabled ? axialRotationSpeed * Mathf.Sign(Mathf.Approximately(axialRotationDirection, 0f) ? 1f : axialRotationDirection) : 0f;
-            float speedResponse = axialRotationEnabled ? acceleration : damping;
+            float effectiveAxialSpeed = adaptiveAxialSpeedCap >= 0f
+                ? Mathf.Min(Mathf.Abs(axialRotationSpeed), adaptiveAxialSpeedCap) * Mathf.Sign(axialRotationSpeed)
+                : axialRotationSpeed;
+            targetAxialRotationSpeed = axialRotationEnabled ? effectiveAxialSpeed * Mathf.Sign(Mathf.Approximately(axialRotationDirection, 0f) ? 1f : axialRotationDirection) : 0f;
+            float speedResponse = (axialRotationEnabled ? acceleration : damping) * angularSmoothing / Mathf.Max(0.1f, rotationalMass);
             currentAxialRotationSpeed = Mathf.MoveTowards(currentAxialRotationSpeed, targetAxialRotationSpeed, speedResponse * dt);
+            currentAxialRotationSpeed = Mathf.Lerp(currentAxialRotationSpeed, targetAxialRotationSpeed, (1f - opticalMomentum) * 0.08f);
             accumulatedAxialSpin += currentAxialRotationSpeed * dt;
 
             if (worldRotationEnabled)
@@ -189,6 +201,16 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         public void SetAxialRotationEnabled(bool enabled)
         {
             axialRotationEnabled = enabled;
+        }
+
+        public void SetAdaptiveAxialSpeedCap(float cap)
+        {
+            adaptiveAxialSpeedCap = Mathf.Max(0f, cap);
+        }
+
+        public void ClearAdaptiveAxialSpeedCap()
+        {
+            adaptiveAxialSpeedCap = -1f;
         }
 
         public void ToggleWorldRotation()

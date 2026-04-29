@@ -68,6 +68,16 @@ namespace KaleidoscopeEngine.Mirrors
         [SerializeField, Range(0f, 1f)] private float depthFadeStrength = 0.16f;
         [SerializeField, Range(0f, 1f)] private float opticalDepthStrength = 0.24f;
 
+        [Header("Optical Continuity")]
+        [SerializeField, Range(1f, 1.6f)] private float sourceOverscanFactor = 1.2f;
+        [SerializeField, Range(0f, 1f)] private float edgeRecursionBlend = 0.5f;
+        [SerializeField, Range(0f, 1f)] private float centerConvergenceStrength = 0.6f;
+        [SerializeField, Range(0f, 1f)] private float radialContinuation = 0.5f;
+        [SerializeField, Range(0f, 1f)] private float centerRecursionBlend = 0.44f;
+        [SerializeField, Range(0f, 1f)] private float innerPatternPropagation = 0.4f;
+        [SerializeField, Range(0.25f, 2f)] private float seamSmoothingQuality = 1.25f;
+        [SerializeField, Range(0.25f, 2f)] private float opticalDistortionQuality = 1.08f;
+
         [Header("Optical Mask")]
         [SerializeField] private bool maskEnabled = true;
         [SerializeField] private KaleidoscopeMaskMode maskMode = KaleidoscopeMaskMode.CircularEyepiece;
@@ -118,6 +128,20 @@ namespace KaleidoscopeEngine.Mirrors
         [SerializeField, Range(0f, 0.04f)] private float scaleDrift = 0.01f;
         [SerializeField, Range(0f, 0.04f)] private float opticalBreathingAmount = 0.01f;
 
+        [Header("Temporal Stability")]
+        [SerializeField, Range(0f, 1f)] private float globalMotionDamping = 0.62f;
+        [SerializeField, Range(0.01f, 4f)] private float opticalInertia = 1.6f;
+        [SerializeField, Range(0f, 1f)] private float temporalSmoothing = 0.72f;
+        [SerializeField, Range(0f, 1f)] private float patternPersistence = 0.68f;
+        [SerializeField, Range(1f, 30f)] private float distortionUpdateRate = 10f;
+        [SerializeField, Range(0f, 1f)] private float opticalFlowStrength = 0.72f;
+        [SerializeField, Range(0.1f, 20f)] private float patternVelocityClamp = 4f;
+        [SerializeField, Range(1f, 90f)] private float maxPatternAngularVelocity = 18f;
+        [SerializeField, Range(0f, 0.2f)] private float radialMotionClamp = 0.025f;
+        [SerializeField, Range(0f, 1f)] private float rhythmPhase;
+        [SerializeField, Range(2f, 20f)] private float opticalBreathingPeriod = 8f;
+        [SerializeField, Range(0f, 0.05f)] private float harmonicMotionStrength = 0.006f;
+
         [Header("Eyepiece Finish")]
         [SerializeField] private bool dirtyGlassEnabled = true;
         [SerializeField, Range(0f, 0.08f)] private float dirtyGlassStrength = 0.018f;
@@ -133,6 +157,17 @@ namespace KaleidoscopeEngine.Mirrors
 
         private Material displayMaterial;
         private float runtimeRotation;
+        private float smoothedRotationVelocity;
+        private float opticalTime;
+        private float nextDistortionUpdateTime;
+        private float sampledOrganicTime;
+        private float smoothedWobbleStrength;
+        private float smoothedBreathingAmplitude;
+        private float smoothedCenterDriftStrength;
+        private float smoothedAsymmetryStrength;
+        private float smoothedDriftAmount;
+        private float smoothedRotationalDrift;
+        private float smoothedScaleDrift;
 
         public int SegmentCount => ComputedSegmentCount;
         public int ManualSegmentCount => segmentCountManual;
@@ -149,6 +184,12 @@ namespace KaleidoscopeEngine.Mirrors
         public float CenterExposure => centerExposure;
         public float OpticalDensity => opticalDensity;
         public float MosaicCohesionScore => Mathf.Clamp01(opticalDensity * 0.34f + SeamBlendStrength * 0.28f + saturationCompression * 0.18f + (vignetteEnabled ? 0.2f : 0f));
+        public float SourceOverscanFactor => sourceOverscanFactor;
+        public float EdgeRecursionBlend => edgeRecursionBlend;
+        public float CenterConvergenceStrength => centerConvergenceStrength;
+        public float RadialContinuation => radialContinuation;
+        public float CenterRecursionBlend => centerRecursionBlend;
+        public float InnerPatternPropagation => innerPatternPropagation;
         public string MaskModeName => maskEnabled ? maskMode.ToString() : "Off";
         public bool ShowSectorBoundaries => showSectorBoundaries;
         public bool VignetteEnabled => vignetteEnabled;
@@ -160,6 +201,11 @@ namespace KaleidoscopeEngine.Mirrors
         public bool SegmentVariationEnabled => segmentVariationEnabled;
         public float DriftAmount => driftAmount;
         public float RotationalDrift => rotationalDrift;
+        public float GlobalMotionDamping => globalMotionDamping;
+        public float OpticalInertia => opticalInertia;
+        public float TemporalSmoothing => temporalSmoothing;
+        public float PatternPersistence => patternPersistence;
+        public float MaxPatternAngularVelocity => maxPatternAngularVelocity;
 
         public void Configure(Material material)
         {
@@ -169,7 +215,30 @@ namespace KaleidoscopeEngine.Mirrors
 
         private void LateUpdate()
         {
-            runtimeRotation += patternRotationSpeed * Mathf.Deg2Rad * Time.deltaTime;
+            float dt = Time.deltaTime;
+            float dampingScale = Mathf.Lerp(1f, 0.28f, globalMotionDamping);
+            float targetVelocity = Mathf.Clamp(
+                patternRotationSpeed * dampingScale,
+                -maxPatternAngularVelocity,
+                maxPatternAngularVelocity) * Mathf.Deg2Rad;
+            float velocityResponse = Mathf.Max(0.01f, opticalInertia);
+            smoothedRotationVelocity = Mathf.Lerp(
+                smoothedRotationVelocity,
+                targetVelocity,
+                1f - Mathf.Exp(-velocityResponse * dt));
+            runtimeRotation += Mathf.Clamp(
+                smoothedRotationVelocity,
+                -patternVelocityClamp * Mathf.Deg2Rad,
+                patternVelocityClamp * Mathf.Deg2Rad) * dt;
+
+            opticalTime += dt * Mathf.Lerp(1f, 0.22f, globalMotionDamping);
+            if (Time.unscaledTime >= nextDistortionUpdateTime)
+            {
+                sampledOrganicTime = Mathf.Lerp(sampledOrganicTime, opticalTime, 1f - patternPersistence * 0.82f);
+                nextDistortionUpdateTime = Time.unscaledTime + 1f / Mathf.Max(1f, distortionUpdateRate);
+            }
+
+            SmoothTemporalParameters(dt);
             ApplyShaderValues();
         }
 
@@ -219,7 +288,8 @@ namespace KaleidoscopeEngine.Mirrors
 
         public void RotatePattern(float direction)
         {
-            runtimeRotation += direction * manualRotationDegreesPerSecond * Mathf.Deg2Rad * Time.deltaTime;
+            float manualVelocity = Mathf.Clamp(manualRotationDegreesPerSecond, 0f, maxPatternAngularVelocity) * Mathf.Deg2Rad;
+            smoothedRotationVelocity += direction * manualVelocity * Time.deltaTime;
             ApplyShaderValues();
         }
 
@@ -331,6 +401,14 @@ namespace KaleidoscopeEngine.Mirrors
             centerBloomLimit = 0.82f;
             opticalDensity = 0.68f;
             visualNoiseAmount = 0.08f;
+            sourceOverscanFactor = 1.2f;
+            edgeRecursionBlend = 0.5f;
+            centerConvergenceStrength = 0.6f;
+            radialContinuation = 0.5f;
+            centerRecursionBlend = 0.44f;
+            innerPatternPropagation = 0.4f;
+            seamSmoothingQuality = 1.25f;
+            opticalDistortionQuality = 1.08f;
             maskEnabled = true;
             vignetteEnabled = true;
             rubyWeight = 0.72f;
@@ -349,6 +427,41 @@ namespace KaleidoscopeEngine.Mirrors
             rotationalDrift = 0.008f;
             scaleDrift = 0.01f;
             opticalBreathingAmount = 0.01f;
+            globalMotionDamping = 0.62f;
+            opticalInertia = 1.6f;
+            temporalSmoothing = 0.72f;
+            patternPersistence = 0.68f;
+            distortionUpdateRate = 10f;
+            opticalFlowStrength = 0.72f;
+            patternVelocityClamp = 4f;
+            maxPatternAngularVelocity = 18f;
+            radialMotionClamp = 0.025f;
+            rhythmPhase = 0f;
+            opticalBreathingPeriod = 8f;
+            harmonicMotionStrength = 0.006f;
+            ApplyShaderValues();
+        }
+
+        public void ApplyQualityProfile(KaleidoscopeQualityProfile profile)
+        {
+            seamSmoothingQuality = Mathf.Clamp(profile.seamSmoothingQuality, 0.25f, 2f);
+            opticalDistortionQuality = Mathf.Clamp(profile.opticalDistortionQuality, 0.25f, 2f);
+            sourceOverscanFactor = Mathf.Clamp(profile.sourceOverscanFactor, 1f, 1.6f);
+            edgeRecursionBlend = Mathf.Clamp01(profile.edgeRecursionBlend);
+            centerConvergenceStrength = Mathf.Clamp01(profile.centerConvergenceStrength);
+            radialContinuation = Mathf.Clamp01(profile.radialContinuation);
+            centerRecursionBlend = Mathf.Clamp01(profile.centerRecursionBlend);
+            innerPatternPropagation = Mathf.Clamp01(profile.innerPatternPropagation);
+            seamSoftness = Mathf.Clamp(0.018f * seamSmoothingQuality, 0.006f, 0.08f);
+            seamFeatherWidth = Mathf.Clamp(0.032f * seamSmoothingQuality, 0.012f, 0.1f);
+            continuityCorrection = Mathf.Clamp01(0.24f + 0.36f * seamSmoothingQuality);
+            radialEdgeSoftness = Mathf.Clamp(0.024f * seamSmoothingQuality, 0.01f, 0.1f);
+            opticalDensity = Mathf.Clamp01(Mathf.Lerp(0.62f, 0.88f, profile.sourceCoverageTarget));
+            visualNoiseAmount = Mathf.Clamp(profile.microDetailDensity * 0.1f, 0.04f, 0.18f);
+            opticalDepthStrength = Mathf.Clamp01(0.18f + profile.opticalDistortionQuality * 0.08f);
+            vignetteStrength = Mathf.Clamp01(0.16f + profile.vignetteQuality * 0.08f);
+            edgeDarkening = Mathf.Clamp01(0.12f + profile.vignetteQuality * 0.08f);
+            seamChromaticAberration = Mathf.Clamp(profile.chromaticAberrationQuality * 0.0012f, 0f, 0.002f);
             ApplyShaderValues();
         }
 
@@ -410,6 +523,14 @@ namespace KaleidoscopeEngine.Mirrors
             displayMaterial.SetFloat("_BackgroundWeight", backgroundWeight);
             displayMaterial.SetFloat("_DepthFadeStrength", depthFadeStrength);
             displayMaterial.SetFloat("_OpticalDepthStrength", opticalDepthStrength);
+            displayMaterial.SetFloat("_SourceOverscanFactor", sourceOverscanFactor);
+            displayMaterial.SetFloat("_EdgeRecursionBlend", edgeRecursionBlend);
+            displayMaterial.SetFloat("_CenterConvergenceStrength", centerConvergenceStrength);
+            displayMaterial.SetFloat("_RadialContinuation", radialContinuation);
+            displayMaterial.SetFloat("_CenterRecursionBlend", centerRecursionBlend);
+            displayMaterial.SetFloat("_InnerPatternPropagation", innerPatternPropagation);
+            displayMaterial.SetFloat("_SeamSmoothingQuality", seamSmoothingQuality);
+            displayMaterial.SetFloat("_OpticalDistortionQuality", opticalDistortionQuality);
             displayMaterial.SetFloat("_MaskEnabled", maskEnabled ? 1f : 0f);
             displayMaterial.SetFloat("_MaskMode", (float)maskMode);
             displayMaterial.SetFloat("_MaskRadius", maskRadius);
@@ -431,31 +552,49 @@ namespace KaleidoscopeEngine.Mirrors
             displayMaterial.SetFloat("_Brightness", brightness);
             displayMaterial.SetFloat("_Contrast", contrast);
             displayMaterial.SetFloat("_Saturation", saturation);
-            displayMaterial.SetFloat("_OrganicTime", Time.time);
+            displayMaterial.SetFloat("_OrganicTime", sampledOrganicTime + rhythmPhase);
             displayMaterial.SetFloat("_WobbleEnabled", wobbleEnabled ? 1f : 0f);
-            displayMaterial.SetFloat("_WobbleStrength", wobbleStrength);
-            displayMaterial.SetFloat("_WobbleSpeed", wobbleSpeed);
+            displayMaterial.SetFloat("_WobbleStrength", smoothedWobbleStrength);
+            displayMaterial.SetFloat("_WobbleSpeed", wobbleSpeed * Mathf.Lerp(1f, 0.24f, globalMotionDamping));
             displayMaterial.SetFloat("_BreathingEnabled", breathingEnabled ? 1f : 0f);
-            displayMaterial.SetFloat("_BreathingAmplitude", breathingAmplitude);
-            displayMaterial.SetFloat("_BreathingSpeed", breathingSpeed);
+            displayMaterial.SetFloat("_BreathingAmplitude", smoothedBreathingAmplitude + harmonicMotionStrength);
+            displayMaterial.SetFloat("_BreathingSpeed", breathingSpeed * Mathf.Lerp(1f, 0.2f, globalMotionDamping));
             displayMaterial.SetFloat("_CenterDriftEnabled", centerDriftEnabled ? 1f : 0f);
-            displayMaterial.SetFloat("_CenterDriftStrength", centerDriftStrength);
-            displayMaterial.SetFloat("_CenterDriftSpeed", centerDriftSpeed);
+            displayMaterial.SetFloat("_CenterDriftStrength", smoothedCenterDriftStrength);
+            displayMaterial.SetFloat("_CenterDriftSpeed", centerDriftSpeed * Mathf.Lerp(1f, 0.25f, globalMotionDamping));
             displayMaterial.SetFloat("_SegmentVariationEnabled", segmentVariationEnabled ? 1f : 0f);
-            displayMaterial.SetFloat("_SegmentAngleVariation", segmentAngleVariation);
-            displayMaterial.SetFloat("_SegmentBrightnessVariation", segmentBrightnessVariation);
+            displayMaterial.SetFloat("_SegmentAngleVariation", segmentAngleVariation * Mathf.Lerp(1f, 0.45f, globalMotionDamping));
+            displayMaterial.SetFloat("_SegmentBrightnessVariation", segmentBrightnessVariation * Mathf.Lerp(1f, 0.5f, globalMotionDamping));
             displayMaterial.SetFloat("_TemporalDriftEnabled", temporalDriftEnabled ? 1f : 0f);
-            displayMaterial.SetFloat("_DriftSpeed", driftSpeed);
-            displayMaterial.SetFloat("_DriftAmount", driftAmount);
+            displayMaterial.SetFloat("_DriftSpeed", driftSpeed * Mathf.Lerp(1f, 0.18f, globalMotionDamping));
+            displayMaterial.SetFloat("_DriftAmount", smoothedDriftAmount);
             displayMaterial.SetFloat("_AsymmetryEnabled", asymmetryEnabled ? 1f : 0f);
-            displayMaterial.SetFloat("_AsymmetryStrength", asymmetryStrength);
-            displayMaterial.SetFloat("_TemporalDriftAmount", temporalDriftAmount);
-            displayMaterial.SetFloat("_RotationalDrift", rotationalDrift);
-            displayMaterial.SetFloat("_ScaleDrift", scaleDrift);
-            displayMaterial.SetFloat("_OpticalBreathingAmount", opticalBreathingAmount);
+            displayMaterial.SetFloat("_AsymmetryStrength", smoothedAsymmetryStrength);
+            displayMaterial.SetFloat("_TemporalDriftAmount", Mathf.Min(temporalDriftAmount * Mathf.Lerp(1f, 0.36f, globalMotionDamping), radialMotionClamp));
+            displayMaterial.SetFloat("_RotationalDrift", smoothedRotationalDrift);
+            displayMaterial.SetFloat("_ScaleDrift", smoothedScaleDrift);
+            displayMaterial.SetFloat("_OpticalBreathingAmount", Mathf.Min(opticalBreathingAmount * Mathf.Lerp(1f, 0.42f, globalMotionDamping), radialMotionClamp));
             displayMaterial.SetFloat("_DirtyGlassEnabled", dirtyGlassEnabled ? 1f : 0f);
             displayMaterial.SetFloat("_DirtyGlassStrength", dirtyGlassStrength);
             displayMaterial.SetFloat("_DirtyGlassScale", dirtyGlassScale);
+        }
+
+        private void SmoothTemporalParameters(float dt)
+        {
+            float coherence = Mathf.Clamp01(temporalSmoothing * opticalFlowStrength);
+            float response = Mathf.Lerp(12f, 1.4f, coherence);
+            float blend = 1f - Mathf.Exp(-response * Mathf.Max(0f, dt));
+            float dampingScale = Mathf.Lerp(1f, 0.34f, globalMotionDamping);
+            float breathingFrequency = 1f / Mathf.Max(0.01f, opticalBreathingPeriod);
+            float slowBreath = Mathf.Sin((opticalTime * breathingFrequency + rhythmPhase) * Mathf.PI * 2f) * harmonicMotionStrength;
+
+            smoothedWobbleStrength = Mathf.Lerp(smoothedWobbleStrength, wobbleStrength * dampingScale, blend);
+            smoothedBreathingAmplitude = Mathf.Lerp(smoothedBreathingAmplitude, breathingAmplitude * dampingScale + slowBreath, blend);
+            smoothedCenterDriftStrength = Mathf.Lerp(smoothedCenterDriftStrength, centerDriftStrength * dampingScale, blend);
+            smoothedAsymmetryStrength = Mathf.Lerp(smoothedAsymmetryStrength, asymmetryStrength * dampingScale, blend);
+            smoothedDriftAmount = Mathf.Lerp(smoothedDriftAmount, Mathf.Min(driftAmount * dampingScale, radialMotionClamp), blend);
+            smoothedRotationalDrift = Mathf.Lerp(smoothedRotationalDrift, rotationalDrift * dampingScale, blend);
+            smoothedScaleDrift = Mathf.Lerp(smoothedScaleDrift, Mathf.Min(scaleDrift * dampingScale, radialMotionClamp), blend);
         }
     }
 }

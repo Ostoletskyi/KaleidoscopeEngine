@@ -37,6 +37,14 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
         _BackgroundWeight ("Background Weight", Float) = 0.42
         _DepthFadeStrength ("Depth Fade Strength", Float) = 0.16
         _OpticalDepthStrength ("Optical Depth Strength", Float) = 0.24
+        _SourceOverscanFactor ("Source Overscan Factor", Float) = 1.2
+        _EdgeRecursionBlend ("Edge Recursion Blend", Float) = 0.5
+        _CenterConvergenceStrength ("Center Convergence Strength", Float) = 0.6
+        _RadialContinuation ("Radial Continuation", Float) = 0.5
+        _CenterRecursionBlend ("Center Recursion Blend", Float) = 0.44
+        _InnerPatternPropagation ("Inner Pattern Propagation", Float) = 0.4
+        _SeamSmoothingQuality ("Seam Smoothing Quality", Float) = 1.25
+        _OpticalDistortionQuality ("Optical Distortion Quality", Float) = 1.08
         _SeamBlendStrength ("Seam Blend Strength", Float) = 0.8
         _SeamFeatherWidth ("Seam Feather Width", Float) = 0.04
         _ContinuityCorrection ("Continuity Correction", Float) = 0.32
@@ -149,6 +157,14 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
             float _BackgroundWeight;
             float _DepthFadeStrength;
             float _OpticalDepthStrength;
+            float _SourceOverscanFactor;
+            float _EdgeRecursionBlend;
+            float _CenterConvergenceStrength;
+            float _RadialContinuation;
+            float _CenterRecursionBlend;
+            float _InnerPatternPropagation;
+            float _SeamSmoothingQuality;
+            float _OpticalDistortionQuality;
             float _SeamBlendStrength;
             float _SeamFeatherWidth;
             float _ContinuityCorrection;
@@ -246,9 +262,23 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
                 return float2(value.x * c - value.y * s, value.x * s + value.y * c);
             }
 
+            float2 MirrorRepeatUV(float2 uv)
+            {
+                return 1.0 - abs(frac(uv) * 2.0 - 1.0);
+            }
+
             float4 SampleSource(float2 uv)
             {
-                return tex2D(_SourceTex, saturate(uv));
+                float2 centered = uv - 0.5;
+                float radius = length(centered);
+                float2 direction = normalize(centered + float2(0.0001, 0.0001));
+                float2 overscannedUv = 0.5 + centered / max(1.0, _SourceOverscanFactor);
+                float2 mirroredUv = MirrorRepeatUV(uv);
+                float2 inwardUv = 0.5 + direction * min(radius, 0.48) * 0.72;
+                float2 recursiveUv = lerp(mirroredUv, inwardUv, 0.38);
+                float edgeBlend = smoothstep(0.44, 0.72, radius) * _EdgeRecursionBlend;
+                float2 finalUv = lerp(saturate(overscannedUv), recursiveUv, edgeBlend);
+                return tex2D(_SourceTex, saturate(finalUv));
             }
 
             float3 ApplyPaletteHierarchy(float3 color)
@@ -400,13 +430,13 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
                 }
 
                 float edgeDistance = min(localAngle, wedge - localAngle) / max(0.0001, wedge);
-                float seamFeather = max(max(0.0001, _SeamSoftness + _SeamFeatherWidth), fwidth(edgeDistance) * 2.0);
+                float seamFeather = max(max(0.0001, _SeamSoftness + _SeamFeatherWidth), fwidth(edgeDistance) * (1.5 + _SeamSmoothingQuality));
                 float seamMask = smoothstep(0.0, seamFeather, edgeDistance);
                 localAngle = lerp(wedge * 0.5, localAngle, lerp(1.0, seamMask, _SeamBlendStrength));
 
                 float normalizedAngle = localAngle / wedge;
                 float foldedAngle = (normalizedAngle - 0.5) * wedge;
-                float distortedRadius = radius * (1.0 + _RadialDistortion * radius * radius);
+                float distortedRadius = radius * (1.0 + _RadialDistortion * _OpticalDistortionQuality * radius * radius);
                 if (_WobbleEnabled > 0.5)
                 {
                     distortedRadius += sin(organicTime * _WobbleSpeed * 0.83 + sector * 1.7) * _WobbleStrength * 0.25;
@@ -426,7 +456,22 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
                         cos(organicTime * _DriftSpeed * 1.3 + angle * 2.0)) * driftAmount * 0.35;
                 }
 
+                float2 rayDirection = normalize(sampleVector + float2(0.0001, 0.0001));
+                float innerContinuity = (1.0 - smoothstep(_CenterMaskRadius * 0.3, _CenterMaskRadius * 1.8, radius)) * _CenterConvergenceStrength;
+                float continuationRadius = max(distortedRadius, _CenterMaskRadius * (0.52 + _RadialContinuation));
+                float2 continuationUV = 0.5 + rayDirection * continuationRadius + organicCenter;
+                sampleUV = lerp(sampleUV, continuationUV, innerContinuity * 0.38);
+
                 float4 color = SampleSource(sampleUV);
+                float sourceEdgeMask = smoothstep(0.42, 0.72, length(sampleUV - 0.5)) * _EdgeRecursionBlend;
+                if (sourceEdgeMask > 0.0001)
+                {
+                    float2 inwardEdgeUV = 0.5 + (sampleUV - 0.5) * 0.58;
+                    float2 rotatedEdgeUV = 0.5 + Rotate2D(sampleUV - 0.5, wedge * 0.5) * 0.64;
+                    float3 edgeFill = lerp(SampleSource(inwardEdgeUV).rgb, SampleSource(rotatedEdgeUV).rgb, 0.35);
+                    color.rgb = lerp(color.rgb, edgeFill, sourceEdgeMask * 0.45);
+                }
+
                 float density = saturate(_OpticalDensity);
                 float2 tangent = normalize(float2(-sin(foldedAngle), cos(foldedAngle)) + float2(0.0001, 0.0001));
                 float2 radial = normalize(sampleVector + float2(0.0001, 0.0001));
@@ -440,6 +485,16 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
                 float bgWeight = _BackgroundWeight * density * (0.65 + radius * 0.5);
                 float totalWeight = 1.0 + fgWeight + midWeight + bgWeight;
                 color.rgb = (color.rgb + foreground.rgb * fgWeight + midground.rgb * midWeight + background.rgb * bgWeight) / max(0.0001, totalWeight);
+
+                float centerPropagationMask = (1.0 - smoothstep(_CenterMaskRadius * 0.25, _CenterMaskRadius * 1.65, radius)) * _CenterRecursionBlend;
+                if (centerPropagationMask > 0.0001)
+                {
+                    float propagationRadius = _CenterMaskRadius * (0.72 + _RadialContinuation * 0.7) + radius * _InnerPatternPropagation;
+                    float2 propagatedUV = 0.5 + rayDirection * propagationRadius + organicCenter;
+                    float2 propagatedUVB = 0.5 + Rotate2D(rayDirection, wedge * 0.5) * propagationRadius + organicCenter;
+                    float3 propagatedColor = (SampleSource(propagatedUV).rgb + SampleSource(propagatedUVB).rgb) * 0.5;
+                    color.rgb = lerp(color.rgb, propagatedColor, saturate(centerPropagationMask * _InnerPatternPropagation));
+                }
 
                 if (_SeamChromaticAberrationEnabled > 0.5 && _SeamChromaticAberration > 0.0)
                 {

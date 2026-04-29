@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using KaleidoscopeEngine.Lighting;
 using KaleidoscopeEngine.Materials;
+using KaleidoscopeEngine.Mirrors;
 using KaleidoscopeEngine.PhysicsSandbox;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -20,23 +21,38 @@ namespace KaleidoscopeEngine.FX
         [SerializeField] private float sparkleIntensity = 0.85f;
         [SerializeField] private float sparkleThreshold = 0.62f;
         [SerializeField] private float sparkleSize = 0.055f;
-        [SerializeField] private float sparkleLifetime = 0.18f;
+        [SerializeField] private float sparkleLifetime = 0.42f;
         [SerializeField] private float sparkleFrequency = 26f;
         [SerializeField] private Color sparkleColor = new Color(0.86f, 0.96f, 1f, 1f);
-        [SerializeField] private float sparkleRandomness = 0.45f;
+        [SerializeField] private float sparkleRandomness = 0.18f;
         [SerializeField] private float cameraAngleInfluence = 0.65f;
         [SerializeField] private float lightAngleInfluence = 0.8f;
         [SerializeField] private int maxActiveSparkles = 36;
         [SerializeField] private string opticalFxLayerName = "KaleidoscopeOpticalFX";
 
+        [Header("Temporal Stability")]
+        [SerializeField, Range(1f, 30f)] private float sparkleUpdateRate = 15f;
+        [SerializeField, Range(1f, 30f)] private float rendererRefreshRate = 8f;
+        [SerializeField, Range(0f, 1f)] private float sparkleClamp = 0.68f;
+        [SerializeField, Range(0f, 1f)] private float subpixelStability = 0.72f;
+        [SerializeField, Range(0f, 1f)] private float highlightPersistence = 0.78f;
+
         private readonly List<Sparkle> sparkles = new List<Sparkle>();
         private readonly List<Renderer> renderers = new List<Renderer>();
         private Material sparkleMaterial;
         private float spawnAccumulator;
+        private float nextSparkleUpdateTime;
+        private float nextRendererRefreshTime;
         private System.Random random = new System.Random(9137);
+        private int requestedMaxActiveSparkles = -1;
+        private float requestedSparkleFrequency = -1f;
 
         public bool SparkleEnabled => sparkleEnabled;
         public float SparkleIntensity => sparkleIntensity;
+        public int RequestedMaxActiveSparkles => requestedMaxActiveSparkles >= 0 ? requestedMaxActiveSparkles : maxActiveSparkles;
+        public int EffectiveMaxActiveSparkles => maxActiveSparkles;
+        public float RequestedSparkleFrequency => requestedSparkleFrequency >= 0f ? requestedSparkleFrequency : sparkleFrequency;
+        public float EffectiveSparkleFrequency => sparkleFrequency;
         public int ActiveSparkles { get; private set; }
 
         public void Configure(GemstoneSpawner gemstoneSpawner, KaleidoscopeLightingRig rig, Camera camera)
@@ -59,6 +75,42 @@ namespace KaleidoscopeEngine.FX
         public void AdjustSparkleIntensity(float delta)
         {
             sparkleIntensity = Mathf.Clamp(sparkleIntensity + delta, 0f, 3f);
+        }
+
+        public void ApplyQualityProfile(KaleidoscopeQualityProfile profile)
+        {
+            requestedMaxActiveSparkles = Mathf.Clamp(profile.sparkleCount, 8, 160);
+            requestedSparkleFrequency = Mathf.Clamp(profile.sparkleFrequency, 4f, 100f);
+            maxActiveSparkles = requestedMaxActiveSparkles;
+            sparkleFrequency = requestedSparkleFrequency;
+            sparkleIntensity = Mathf.Clamp(profile.sparkleIntensity, 0f, 3f);
+            EnsurePool();
+            HideSparklesBeyondQualityLimit();
+        }
+
+        public void ApplyVisibleSparkleTarget(int target)
+        {
+            int safeTarget = Mathf.Clamp(target, 0, 160);
+            requestedMaxActiveSparkles = Mathf.Max(RequestedMaxActiveSparkles, safeTarget);
+            requestedSparkleFrequency = Mathf.Max(RequestedSparkleFrequency, safeTarget * 0.55f);
+            maxActiveSparkles = Mathf.Max(maxActiveSparkles, safeTarget);
+            sparkleFrequency = Mathf.Max(sparkleFrequency, safeTarget * 0.55f);
+            EnsurePool();
+        }
+
+        public void SetAdaptiveSparkleLimit(int maxSparkles, float frequencyMultiplier)
+        {
+            maxActiveSparkles = Mathf.Clamp(maxSparkles, 0, Mathf.Max(0, RequestedMaxActiveSparkles));
+            sparkleFrequency = Mathf.Clamp(RequestedSparkleFrequency * Mathf.Clamp01(frequencyMultiplier), 0f, RequestedSparkleFrequency);
+            EnsurePool();
+            HideSparklesBeyondQualityLimit();
+        }
+
+        public void ClearAdaptiveSparkleLimit()
+        {
+            maxActiveSparkles = RequestedMaxActiveSparkles;
+            sparkleFrequency = RequestedSparkleFrequency;
+            EnsurePool();
         }
 
         public void SetOpticalFxLayerName(string layerName)
@@ -84,11 +136,20 @@ namespace KaleidoscopeEngine.FX
             }
 
             mainCamera = mainCamera != null ? mainCamera : Camera.main;
-            RefreshRenderers();
-            UpdateSparkles();
+            if (Time.unscaledTime >= nextRendererRefreshTime)
+            {
+                RefreshRenderers();
+                nextRendererRefreshTime = Time.unscaledTime + 1f / Mathf.Max(1f, rendererRefreshRate);
+            }
+
+            if (Time.unscaledTime >= nextSparkleUpdateTime)
+            {
+                UpdateSparkles();
+                nextSparkleUpdateTime = Time.unscaledTime + 1f / Mathf.Max(1f, sparkleUpdateRate);
+            }
 
             float lightFactor = lightingRig != null && lightingRig.MovingLightEnabled ? 1.25f : 0.75f;
-            spawnAccumulator += Time.deltaTime * sparkleFrequency * sparkleIntensity * lightFactor;
+            spawnAccumulator += Time.deltaTime * sparkleFrequency * sparkleIntensity * lightFactor * Mathf.Lerp(1f, 0.38f, subpixelStability);
             while (spawnAccumulator >= 1f)
             {
                 spawnAccumulator -= 1f;
@@ -171,6 +232,12 @@ namespace KaleidoscopeEngine.FX
                     continue;
                 }
 
+                if (i >= maxActiveSparkles)
+                {
+                    sparkle.transform.gameObject.SetActive(false);
+                    continue;
+                }
+
                 float remaining = sparkle.endTime - Time.time;
                 if (remaining <= 0f)
                 {
@@ -181,8 +248,9 @@ namespace KaleidoscopeEngine.FX
                 ActiveSparkles++;
                 float fade = Mathf.Clamp01(remaining / Mathf.Max(0.01f, sparkleLifetime));
                 float pulse = Mathf.Sin(fade * Mathf.PI);
-                float size = sparkle.baseSize * (0.65f + pulse * 0.55f);
-                sparkle.transform.localScale = new Vector3(size, size, size);
+                float size = sparkle.baseSize * (0.82f + pulse * 0.28f);
+                Vector3 targetScale = new Vector3(size, size, size);
+                sparkle.transform.localScale = Vector3.Lerp(sparkle.transform.localScale, targetScale, 1f - highlightPersistence * 0.72f);
                 if (mainCamera != null)
                 {
                     sparkle.transform.LookAt(mainCamera.transform.position, Vector3.up);
@@ -207,7 +275,7 @@ namespace KaleidoscopeEngine.FX
             float profileResponse = profile != null ? profile.sparkleResponse : 0.5f;
             float angleScore = EstimateAngleScore(target);
             float randomness = Mathf.Lerp(1f, (float)random.NextDouble(), sparkleRandomness);
-            float score = angleScore * profileResponse * sparkleIntensity * randomness;
+            float score = Mathf.Min(angleScore * profileResponse * sparkleIntensity * randomness, Mathf.Lerp(1.6f, 0.8f, sparkleClamp));
             if (score < sparkleThreshold)
             {
                 return;
@@ -230,7 +298,7 @@ namespace KaleidoscopeEngine.FX
             sparkle.transform.position = position;
             sparkle.transform.localScale = Vector3.one * size;
             sparkle.baseSize = size;
-            sparkle.endTime = Time.time + sparkleLifetime * RandomRange(0.65f, 1.35f);
+            sparkle.endTime = Time.time + sparkleLifetime * RandomRange(0.88f, 1.22f);
             sparkle.transform.gameObject.SetActive(true);
 
             Color color = profile != null
@@ -246,7 +314,8 @@ namespace KaleidoscopeEngine.FX
         private Sparkle FindFreeSparkle()
         {
             EnsurePool();
-            for (int i = 0; i < sparkles.Count; i++)
+            int usableSparkles = Mathf.Min(sparkles.Count, maxActiveSparkles);
+            for (int i = 0; i < usableSparkles; i++)
             {
                 if (sparkles[i].transform != null && !sparkles[i].transform.gameObject.activeSelf)
                 {
@@ -306,6 +375,17 @@ namespace KaleidoscopeEngine.FX
             }
 
             ActiveSparkles = 0;
+        }
+
+        private void HideSparklesBeyondQualityLimit()
+        {
+            for (int i = maxActiveSparkles; i < sparkles.Count; i++)
+            {
+                if (sparkles[i].transform != null)
+                {
+                    sparkles[i].transform.gameObject.SetActive(false);
+                }
+            }
         }
 
         private float RandomRange(float min, float max)

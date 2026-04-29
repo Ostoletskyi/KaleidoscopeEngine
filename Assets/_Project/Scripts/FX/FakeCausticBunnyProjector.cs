@@ -19,8 +19,8 @@ namespace KaleidoscopeEngine.FX
         [SerializeField] private int spotCount = 18;
         [SerializeField] private float spotSizeMin = 0.08f;
         [SerializeField] private float spotSizeMax = 0.22f;
-        [SerializeField] private float movementSpeed = 0.42f;
-        [SerializeField] private float flickerAmount = 0.35f;
+        [SerializeField] private float movementSpeed = 0.18f;
+        [SerializeField] private float flickerAmount = 0.12f;
         [SerializeField] private Color colorTint = new Color(0.75f, 0.95f, 1f, 1f);
         [SerializeField] private float fadeDistance = 5.5f;
         [SerializeField] private bool attachToTubeInterior = true;
@@ -29,12 +29,22 @@ namespace KaleidoscopeEngine.FX
         [SerializeField] private float tubeLength = 5.1f;
         [SerializeField] private string opticalFxLayerName = "KaleidoscopeOpticalFX";
 
+        [Header("Temporal Stability")]
+        [SerializeField, Range(1f, 30f)] private float causticUpdateRate = 10f;
+        [SerializeField, Range(0f, 1f)] private float opticalInertia = 0.74f;
+        [SerializeField, Range(0f, 1f)] private float lowFrequencyShimmer = 0.68f;
+
         private readonly List<CausticSpot> spots = new List<CausticSpot>();
         private Material spotMaterial;
         private System.Random random = new System.Random(7351);
+        private int requestedSpotCount = -1;
+        private int effectiveSpotCount = -1;
+        private float nextCausticUpdateTime;
 
         public bool CausticsEnabled => causticsEnabled;
-        public int SpotCount => spotCount;
+        public int SpotCount => EffectiveSpotCount;
+        public int RequestedSpotCount => requestedSpotCount >= 0 ? requestedSpotCount : spotCount;
+        public int EffectiveSpotCount => effectiveSpotCount >= 0 ? Mathf.Min(effectiveSpotCount, RequestedSpotCount) : spotCount;
 
         public void Configure(Transform tubeTransform, KaleidoscopeLightingRig rig, Camera camera, float radius, float length)
         {
@@ -49,6 +59,19 @@ namespace KaleidoscopeEngine.FX
         public void ToggleCaustics()
         {
             causticsEnabled = !causticsEnabled;
+            ApplyVisibility();
+        }
+
+        public void SetAdaptiveSpotLimit(int maxSpots)
+        {
+            requestedSpotCount = RequestedSpotCount;
+            effectiveSpotCount = Mathf.Clamp(maxSpots, 0, Mathf.Max(0, RequestedSpotCount));
+            ApplyVisibility();
+        }
+
+        public void ClearAdaptiveSpotLimit()
+        {
+            effectiveSpotCount = -1;
             ApplyVisibility();
         }
 
@@ -73,6 +96,13 @@ namespace KaleidoscopeEngine.FX
                 return;
             }
 
+            if (Time.unscaledTime < nextCausticUpdateTime)
+            {
+                return;
+            }
+
+            nextCausticUpdateTime = Time.unscaledTime + 1f / Mathf.Max(1f, causticUpdateRate);
+
             mainCamera = mainCamera != null ? mainCamera : Camera.main;
             EnsureSpotCount();
 
@@ -95,14 +125,15 @@ namespace KaleidoscopeEngine.FX
 
                 Vector3 radial = new Vector3(0f, Mathf.Cos(angle), Mathf.Sin(angle));
                 Vector3 localPosition = new Vector3(x, radial.y * tubeRadius, radial.z * tubeRadius);
-                spot.transform.localPosition = localPosition;
-                spot.transform.localRotation = Quaternion.LookRotation(-radial, Vector3.right);
+                Quaternion localRotation = Quaternion.LookRotation(-radial, Vector3.right);
 
-                float flicker = 1f + Mathf.Sin(time * 5.7f + spot.phase) * flickerAmount;
+                float flicker = 1f + Mathf.Sin(time * Mathf.Lerp(1.2f, 0.35f, lowFrequencyShimmer) + spot.phase) * flickerAmount;
                 float distanceFade = EstimateDistanceFade(spot.transform.position);
                 float alpha = Mathf.Clamp01(intensity * spot.alpha * flicker * lightBoost * distanceFade);
                 float size = Mathf.Lerp(spotSizeMin, spotSizeMax, spot.size01) * (0.85f + flicker * 0.12f);
-                spot.transform.localScale = new Vector3(size, size, size);
+                spot.transform.localPosition = Vector3.Lerp(spot.transform.localPosition, localPosition, 1f - opticalInertia * 0.82f);
+                spot.transform.localRotation = Quaternion.Slerp(spot.transform.localRotation, localRotation, 1f - opticalInertia * 0.82f);
+                spot.transform.localScale = Vector3.Lerp(spot.transform.localScale, new Vector3(size, size, size), 1f - opticalInertia * 0.72f);
 
                 spot.propertyBlock ??= new MaterialPropertyBlock();
                 Color color = colorTint * Mathf.Lerp(0.55f, 1.55f, spot.alpha);
@@ -123,7 +154,9 @@ namespace KaleidoscopeEngine.FX
         private void EnsureSpotCount()
         {
             EnsureMaterial();
-            while (spots.Count < spotCount)
+            requestedSpotCount = Mathf.Max(RequestedSpotCount, spotCount);
+            int targetCount = Mathf.Max(RequestedSpotCount, EffectiveSpotCount);
+            while (spots.Count < targetCount)
             {
                 GameObject spotObject = GameObject.CreatePrimitive(PrimitiveType.Quad);
                 spotObject.name = $"Fake Caustic Bunny_{spots.Count:00}";
@@ -156,7 +189,7 @@ namespace KaleidoscopeEngine.FX
             {
                 if (spots[i].transform != null)
                 {
-                    spots[i].transform.gameObject.SetActive(causticsEnabled && i < spotCount);
+                    spots[i].transform.gameObject.SetActive(causticsEnabled && i < EffectiveSpotCount);
                 }
             }
         }
@@ -187,7 +220,7 @@ namespace KaleidoscopeEngine.FX
             {
                 if (spots[i].transform != null)
                 {
-                    spots[i].transform.gameObject.SetActive(causticsEnabled && i < spotCount);
+                    spots[i].transform.gameObject.SetActive(causticsEnabled && i < EffectiveSpotCount);
                 }
             }
         }

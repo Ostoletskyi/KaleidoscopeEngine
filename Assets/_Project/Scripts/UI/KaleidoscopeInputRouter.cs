@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using KaleidoscopeEngine.Mirrors;
+using KaleidoscopeEngine.Performance;
 using KaleidoscopeEngine.PhysicsSandbox;
 using UnityEngine;
 
@@ -48,7 +49,16 @@ namespace KaleidoscopeEngine.UI
         FullDebug,
         HideDebug,
         ResetVisualTuning,
-        CaptureScreenshot
+        CaptureScreenshot,
+        QualityDown,
+        QualityUp,
+        QualityMinimal,
+        QualityExtreme,
+        ToggleAdaptiveQuality,
+        PerformancePresetDown,
+        PerformancePresetUp,
+        ForceSafeMode,
+        ToggleAutoBalance
     }
 
     [DisallowMultipleComponent]
@@ -80,6 +90,7 @@ namespace KaleidoscopeEngine.UI
         [SerializeField] private KaleidoscopeDebugPanel debugPanel;
         [SerializeField] private KaleidoscopeHelpOverlay helpOverlay;
         [SerializeField] private OpticalSourceChamber opticalSourceChamber;
+        [SerializeField] private AdaptiveQualityController adaptiveQualityController;
 
         [Header("Response")]
         [SerializeField] private int densityCountStep = 12;
@@ -98,7 +109,8 @@ namespace KaleidoscopeEngine.UI
             KaleidoscopeViewerCameraController viewerCamera,
             KaleidoscopeDebugPanel panel,
             KaleidoscopeHelpOverlay overlay,
-            OpticalSourceChamber sourceChamber)
+            OpticalSourceChamber sourceChamber,
+            AdaptiveQualityController adaptiveController = null)
         {
             chamber = physicsChamber;
             spawner = gemstoneSpawner;
@@ -109,7 +121,13 @@ namespace KaleidoscopeEngine.UI
             debugPanel = panel;
             helpOverlay = overlay;
             opticalSourceChamber = sourceChamber;
+            adaptiveQualityController = adaptiveController;
             BuildBindings();
+        }
+
+        public void ConfigureAdaptiveQuality(AdaptiveQualityController adaptiveController)
+        {
+            adaptiveQualityController = adaptiveController;
         }
 
         private void Awake()
@@ -164,6 +182,15 @@ namespace KaleidoscopeEngine.UI
             Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.HideDebug, KeyCode.F4);
             Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.ResetVisualTuning, KeyCode.F5);
             Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.CaptureScreenshot, KeyCode.F6);
+            Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.QualityDown, KeyCode.F7);
+            Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.QualityUp, KeyCode.F8);
+            Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.QualityMinimal, KeyCode.F7, true);
+            Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.QualityExtreme, KeyCode.F8, true);
+            Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.ToggleAdaptiveQuality, KeyCode.F9);
+            Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.ToggleAutoBalance, KeyCode.F9, true);
+            Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.PerformancePresetDown, KeyCode.F10);
+            Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.PerformancePresetUp, KeyCode.F11);
+            Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.ForceSafeMode, KeyCode.F12);
         }
 
         private void Add(KaleidoscopeControlZone zone, KaleidoscopeOperatorAction action, KeyCode key, bool shift = false)
@@ -368,6 +395,8 @@ namespace KaleidoscopeEngine.UI
 
         private void HandleDebugZone()
         {
+            bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+
             if (Pressed(KeyCode.F1))
             {
                 KaleidoscopeHelpOverlay.ToggleRuntimeOverlay(helpOverlay);
@@ -403,6 +432,66 @@ namespace KaleidoscopeEngine.UI
             if (Pressed(KeyCode.F6))
             {
                 CaptureScreenshot();
+            }
+
+            if (Pressed(KeyCode.F7))
+            {
+                if (shift)
+                {
+                    mirrorPipeline?.SetMinimumQuality();
+                    Feedback("Quality: Minimal");
+                }
+                else
+                {
+                    mirrorPipeline?.AdjustQualityLevel(-1);
+                    Feedback($"Quality: {(mirrorPipeline != null ? mirrorPipeline.QualityPresetName : "Down")}");
+                }
+            }
+
+            if (Pressed(KeyCode.F8))
+            {
+                if (shift)
+                {
+                    mirrorPipeline?.SetMaximumQuality();
+                    Feedback("Quality: Extreme");
+                }
+                else
+                {
+                    mirrorPipeline?.AdjustQualityLevel(1);
+                    Feedback($"Quality: {(mirrorPipeline != null ? mirrorPipeline.QualityPresetName : "Up")}");
+                }
+            }
+
+            if (Pressed(KeyCode.F9))
+            {
+                if (shift)
+                {
+                    adaptiveQualityController?.ToggleAutoBalance();
+                    Feedback(adaptiveQualityController != null && adaptiveQualityController.AutoBalanceEnabled ? "Auto-Balance Enabled" : "Auto-Balance Disabled");
+                }
+                else
+                {
+                    adaptiveQualityController?.ToggleAdaptiveQuality();
+                    Feedback(adaptiveQualityController != null && adaptiveQualityController.AdaptiveQualityEnabled ? "Adaptive Quality Enabled" : "Adaptive Quality Disabled");
+                }
+            }
+
+            if (Pressed(KeyCode.F10))
+            {
+                adaptiveQualityController?.PerformancePresetDown();
+                Feedback("Performance Preset Down");
+            }
+
+            if (Pressed(KeyCode.F11))
+            {
+                adaptiveQualityController?.PerformancePresetUp();
+                Feedback("Performance Preset Up");
+            }
+
+            if (Pressed(KeyCode.F12))
+            {
+                adaptiveQualityController?.ForceSafeMode();
+                Feedback("Emergency Safe Mode");
             }
         }
 
