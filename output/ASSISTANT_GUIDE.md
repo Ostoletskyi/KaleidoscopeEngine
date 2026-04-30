@@ -9,7 +9,7 @@
 - Входные точки приложения: файлы запуска, основной модуль, package.json/csproj/sln.
 
 ## Где конфиг
-- Utility config: `C:\Projects\CLIPS\ProjectOpsUtility\config\config.json`
+- Utility config: `C:\Projects\CLIPS\Caleidoscope\Caleidoscope\config\config.json`
 - Codex config: `%USERPROFILE%\.codex\config.toml` или `<ProjectPath>\.codex\config.toml`.
 
 ## Какие папки не трогать
@@ -17,7 +17,7 @@
 - Любые каталоги сборки, кеша и внешних зависимостей без явной необходимости.
 
 ## Где логи
-- Utility logs: `C:\Projects\CLIPS\ProjectOpsUtility\logs`
+- Utility logs: `C:\Projects\CLIPS\Caleidoscope\Caleidoscope\logs`
 
 ## Как запускать проект
 - Использовать штатные скрипты/команды проекта.
