@@ -462,6 +462,7 @@ namespace KaleidoscopeEngine.Mirrors
         public string MaskModeName => maskEnabled ? maskMode.ToString() : "Off";
         public bool ShowSectorBoundaries => showSectorBoundaries;
         public bool VignetteEnabled => vignetteEnabled;
+        public float VignetteStrength => vignetteStrength;
         public bool SeamBlendingEnabled => seamBlendingEnabled;
         public bool AsymmetryEnabled => asymmetryEnabled;
         public bool WobbleEnabled => wobbleEnabled;
@@ -787,6 +788,12 @@ namespace KaleidoscopeEngine.Mirrors
             brightness = Mathf.Clamp(brightnessValue, 0f, 3f);
             contrast = Mathf.Clamp(contrastValue, 0f, 3f);
             saturation = Mathf.Clamp(saturationValue, 0f, 2f);
+            ApplyShaderValues();
+        }
+
+        public void SetVignetteStrength(float strength)
+        {
+            vignetteStrength = Mathf.Clamp01(strength);
             ApplyShaderValues();
         }
 

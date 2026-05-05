@@ -43,7 +43,7 @@ namespace KaleidoscopeEngine.UI
         private int playlistIndex = -1;
 
         public bool MenuVisible => menuVisible;
-        public AudioSource AudioSource => audioSource;
+        public AudioSource ActiveAudioSource => audioSource;
 
         public void Configure(
             KaleidoscopeRuntimeConfig config,

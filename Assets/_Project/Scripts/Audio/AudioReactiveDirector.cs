@@ -23,6 +23,7 @@ namespace KaleidoscopeEngine.Audio
             public float brightnessImpulse;
             public float contrastImpulse;
             public float saturationImpulse;
+            public float vignetteImpulse;
             public float spinImpulse;
             public float seamImpulse;
             public float imageMotionImpulse;
@@ -68,6 +69,7 @@ namespace KaleidoscopeEngine.Audio
         private float baseBrightness;
         private float baseContrast;
         private float baseSaturation;
+        private float baseVignetteStrength;
         private float baseSeamSoftness;
         private float baseImageScroll;
         private float baseImageZoom;
@@ -269,9 +271,9 @@ namespace KaleidoscopeEngine.Audio
                 return;
             }
 
-            if (launcherUI != null && launcherUI.AudioSource != null)
+            if (launcherUI != null && launcherUI.ActiveAudioSource != null)
             {
-                SetAudioSource(launcherUI.AudioSource);
+                SetAudioSource(launcherUI.ActiveAudioSource);
                 return;
             }
 
@@ -327,19 +329,19 @@ namespace KaleidoscopeEngine.Audio
             switch (audioEvent.Type)
             {
                 case AudioReactiveEventType.StrongBeat:
-                    return Pulse(audioEvent.Type, 0.34f, confidence, 0.075f, 0.09f, 0.035f, 0.055f, 18f, 0.014f, 0.02f, false);
+                    return Pulse(audioEvent.Type, 0.34f, confidence, 0.075f, 0.09f, 0.035f, 0.055f, -0.012f, 18f, 0.014f, 0.02f, false);
                 case AudioReactiveEventType.Snare:
-                    return Pulse(audioEvent.Type, 0.24f, confidence, 0.018f, 0.025f, 0.02f, 0.02f, 9f, 0.018f, 0.01f, false);
+                    return Pulse(audioEvent.Type, 0.24f, confidence, 0.018f, 0.025f, 0.02f, 0.02f, -0.006f, 9f, 0.018f, 0.01f, false);
                 case AudioReactiveEventType.Drop:
-                    return Pulse(audioEvent.Type, 2.15f, confidence, 0.13f, -0.1f, 0.14f, 0.1f, 135f, 0.035f, 0.09f, false);
+                    return Pulse(audioEvent.Type, 2.15f, confidence, 0.13f, -0.1f, 0.14f, 0.1f, 0.1f, 135f, 0.035f, 0.09f, false);
                 case AudioReactiveEventType.Break:
-                    return Pulse(audioEvent.Type, 1.45f, confidence, -0.05f, -0.22f, -0.08f, -0.28f, -baseSpin, 0f, -0.03f, true);
+                    return Pulse(audioEvent.Type, 1.45f, confidence, -0.05f, -0.22f, -0.08f, -0.28f, 0.14f, -baseSpin, 0f, -0.03f, true);
                 case AudioReactiveEventType.Silence:
-                    return Pulse(audioEvent.Type, 1.8f, confidence, -0.08f, -0.28f, -0.1f, -0.34f, -baseSpin, 0f, -0.04f, true);
+                    return Pulse(audioEvent.Type, 1.8f, confidence, -0.08f, -0.28f, -0.1f, -0.34f, 0.16f, -baseSpin, 0f, -0.04f, true);
                 case AudioReactiveEventType.Build:
-                    return Pulse(audioEvent.Type, 0.8f, confidence, 0.035f, 0.0f, 0.04f, 0.06f, 24f, 0.012f, 0.035f, false);
+                    return Pulse(audioEvent.Type, 0.8f, confidence, 0.035f, 0.0f, 0.04f, 0.06f, 0.035f, 24f, 0.012f, 0.035f, false);
                 default:
-                    return Pulse(audioEvent.Type, 0.22f, confidence, 0.045f, 0.055f, 0.018f, 0.032f, 6f, 0.01f, 0.016f, false);
+                    return Pulse(audioEvent.Type, 0.22f, confidence, 0.045f, 0.055f, 0.018f, 0.032f, -0.008f, 6f, 0.01f, 0.016f, false);
             }
         }
 
@@ -351,6 +353,7 @@ namespace KaleidoscopeEngine.Audio
             float brightness,
             float contrast,
             float saturation,
+            float vignette,
             float spin,
             float seam,
             float imageMotion,
@@ -365,6 +368,7 @@ namespace KaleidoscopeEngine.Audio
                 brightnessImpulse = brightness,
                 contrastImpulse = contrast,
                 saturationImpulse = saturation,
+                vignetteImpulse = vignette,
                 spinImpulse = spin,
                 seamImpulse = seam,
                 imageMotionImpulse = imageMotion,
@@ -407,6 +411,7 @@ namespace KaleidoscopeEngine.Audio
             float brightness = 0f;
             float contrast = 0f;
             float saturation = 0f;
+            float vignette = 0f;
             float spin = 0f;
             float seam = 0f;
             float imageMotion = 0f;
@@ -422,6 +427,7 @@ namespace KaleidoscopeEngine.Audio
                 brightness += pulse.brightnessImpulse * envelope;
                 contrast += pulse.contrastImpulse * envelope;
                 saturation += pulse.saturationImpulse * envelope;
+                vignette += pulse.vignetteImpulse * envelope;
                 spin += pulse.spinImpulse * envelope;
                 seam += pulse.seamImpulse * envelope;
                 imageMotion += pulse.imageMotionImpulse * envelope;
@@ -441,6 +447,7 @@ namespace KaleidoscopeEngine.Audio
             zoom += buildPressure * 0.06f * intensity;
             contrast += buildPressure * 0.05f * intensity;
             saturation += buildPressure * 0.08f * intensity;
+            vignette += buildPressure * 0.045f * intensity;
             spin += buildPressure * 48f * intensity;
             imageMotion += buildPressure * 0.045f * intensity;
 
@@ -448,6 +455,7 @@ namespace KaleidoscopeEngine.Audio
             mirrorController.SetPatternZoomTarget(Mathf.Clamp(baseZoom + zoom, 0.45f, 3.5f));
             mirrorController.SetPatternRotationSpeed(targetSpin);
             mirrorController.SetSeamSoftness(Mathf.Clamp(baseSeamSoftness + seam, 0f, 0.25f));
+            mirrorController.SetVignetteStrength(Mathf.Clamp(baseVignetteStrength + vignette, 0f, 0.6f));
             mirrorController.SetFinalColorGrading(
                 Mathf.Clamp(baseBrightness + brightness, 0.35f, 1.4f),
                 Mathf.Clamp(baseContrast + contrast, 0.55f, 1.75f),
@@ -546,6 +554,7 @@ namespace KaleidoscopeEngine.Audio
             baseBrightness = mirrorController.Brightness;
             baseContrast = mirrorController.Contrast;
             baseSaturation = mirrorController.Saturation;
+            baseVignetteStrength = mirrorController.VignetteStrength;
             baseSeamSoftness = mirrorController.SeamSoftness;
             baseSegmentCount = mirrorController.SegmentCount;
             if (imageMode != null)
@@ -577,6 +586,7 @@ namespace KaleidoscopeEngine.Audio
             mirrorController.SetPatternRotationSpeed(baseSpin);
             mirrorController.SetSegmentCount(baseSegmentCount);
             mirrorController.SetSeamSoftness(baseSeamSoftness);
+            mirrorController.SetVignetteStrength(baseVignetteStrength);
             mirrorController.SetFinalColorGrading(baseBrightness, baseContrast, baseSaturation);
             if (imageMode != null)
             {
