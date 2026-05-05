@@ -24,14 +24,14 @@ namespace KaleidoscopeEngine.Performance
         [Min(0)] public int minimumVisualMicroChips = 200;
         [Min(0)] public int minimumSparkles = 8;
         [Min(0)] public int minimumCausticSpots = 4;
-        [Min(0f)] public float minimumAxialSpeedCap = 8f;
-        public KaleidoscopeQualityLevel emergencyQuality = KaleidoscopeQualityLevel.Low;
+        [Min(0f)] public float minimumAxialSpeedCap = 40f;
+        public KaleidoscopeQualityLevel emergencyQuality = KaleidoscopeQualityLevel.Medium;
 
         [Header("Budget Ceilings")]
         [Min(0)] public int maximumVisualMicroChips = 5200;
         [Min(0)] public int maximumSparkles = 160;
         [Min(0)] public int maximumCausticSpots = 48;
-        [Min(0f)] public float maximumAxialSpeedCap = 90f;
+        [Min(0f)] public float maximumAxialSpeedCap = 200f;
 
         public static PerformanceBudgetProfile CreateRuntimeDefault()
         {

@@ -8,14 +8,14 @@ namespace KaleidoscopeEngine.Mirrors
     {
         [Header("Diffuser")]
         [SerializeField] private bool diffuserEnabled = true;
-        [SerializeField, Range(0f, 8f)] private float diffuserBrightness = 1.85f;
+        [SerializeField, Range(0f, 8f)] private float diffuserBrightness = 0.72f;
         [SerializeField] private Color diffuserColor = new Color(0.92f, 0.97f, 1f, 1f);
         [SerializeField, Range(0f, 1f)] private float diffuserOpacity = 0.34f;
         [SerializeField] private float diffuserDistance = 0.34f;
 
         [Header("Backlight")]
         [SerializeField] private bool backlightEnabled = true;
-        [SerializeField, Range(0f, 20f)] private float backlightIntensity = 5.5f;
+        [SerializeField, Range(0f, 20f)] private float backlightIntensity = 1.4f;
         [SerializeField] private float backlightRange = 5.2f;
 
         private Transform chamber;
@@ -47,6 +47,14 @@ namespace KaleidoscopeEngine.Mirrors
         {
             diffuserEnabled = !diffuserEnabled;
             backlightEnabled = diffuserEnabled;
+            ApplyState();
+        }
+
+        public void ApplyExposureSafety(float maxDiffuserBrightness, float maxBacklightIntensity)
+        {
+            diffuserBrightness = Mathf.Min(diffuserBrightness, Mathf.Max(0f, maxDiffuserBrightness));
+            backlightIntensity = Mathf.Min(backlightIntensity, Mathf.Max(0f, maxBacklightIntensity));
+            diffuserOpacity = Mathf.Min(diffuserOpacity, 0.24f);
             ApplyState();
         }
 

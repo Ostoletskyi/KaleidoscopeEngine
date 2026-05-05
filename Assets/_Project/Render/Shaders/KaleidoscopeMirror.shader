@@ -3,7 +3,12 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
     Properties
     {
         _SourceTex ("Source Texture", 2D) = "black" {}
+        _SourceTexB ("Secondary Source Texture", 2D) = "black" {}
         _PreviewSource ("Preview Source", Float) = 0
+        _RenderPixelationFactor ("Render Pixelation Factor", Float) = 1
+        colorDepthMode ("colorDepthMode", Float) = 10
+        colorSteps ("colorSteps", Float) = 16777216
+        paletteQuantizationStrength ("paletteQuantizationStrength", Float) = 0
         _SegmentCount ("Segment Count", Float) = 8
         _Rotation ("Rotation", Float) = 0
         _Zoom ("Zoom", Float) = 1
@@ -20,18 +25,39 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
         _ShowSectorBoundaries ("Show Sector Boundaries", Float) = 0
         _BoundaryDebugColor ("Boundary Debug Color", Color) = (1, 0.25, 0.08, 1)
         _CenterScale ("Center Scale", Float) = 1.05
-        _CenterBrightness ("Center Brightness", Float) = 0.94
-        _CenterVignette ("Center Vignette", Float) = 0.18
-        _CenterStabilization ("Center Stabilization", Float) = 0.45
+        _CenterBrightness ("Center Brightness", Float) = 1.08
+        _CenterVignette ("Center Vignette", Float) = 0.12
+        _CenterStabilization ("Center Stabilization", Float) = 0.72
+        _CenterMaskEnabled ("Center Mask Enabled", Float) = 1
+        _CenterMaskMode ("Center Mask Mode", Float) = 0
         _CenterMaskRadius ("Center Mask Radius", Float) = 0.18
-        _CenterExposure ("Center Exposure", Float) = 0.68
+        _CenterExposure ("Center Exposure", Float) = 0.86
         _CenterFalloff ("Center Falloff", Float) = 0.34
-        _CenterContrast ("Center Contrast", Float) = 0.82
-        _CenterGradientStrength ("Center Gradient Strength", Float) = 0.16
-        _CenterDetailBoost ("Center Detail Boost", Float) = 0.12
-        _CenterBloomLimit ("Center Bloom Limit", Float) = 0.82
-        _OpticalDensity ("Optical Density", Float) = 0.68
-        _VisualNoiseAmount ("Visual Noise Amount", Float) = 0.08
+        _CenterContrast ("Center Contrast", Float) = 0.95
+        _CenterGradientStrength ("Center Gradient Strength", Float) = 0.22
+        _CenterDetailBoost ("Center Detail Boost", Float) = 0.18
+        _CenterBloomLimit ("Center Bloom Limit", Float) = 1.08
+        _CenterCleanEnabled ("Center Clean Enabled", Float) = 0
+        _CenterCleanRadius ("Center Clean Radius", Float) = 0.095
+        _CenterCleanFeather ("Center Clean Feather", Float) = 0.055
+        _CenterReconstructFromTexture ("Center Reconstruct From Texture", Float) = 1
+        _CenterPatternContinuation ("Center Pattern Continuation", Float) = 0.92
+        _CenterFillMode ("Center Fill Mode", Float) = 2
+        _CenterWorkRadius ("Center Work Radius", Float) = 0.095
+        _CenterWorkFeather ("Center Work Feather", Float) = 0.055
+        _CenterBlendStrength ("Center Blend Strength", Float) = 0.78
+        _CenterContinuationStrength ("Center Continuation Strength", Float) = 0.76
+        _CenterDetailAmount ("Center Detail Amount", Float) = 0.18
+        _CenterSampleScale ("Center Sample Scale", Float) = 1
+        _CenterReconstructionQuality ("Center Reconstruction Quality", Float) = 0.7
+        _CenterOnlyDebugMode ("Center Only Debug Mode", Float) = 0
+        _CenterMaskPreview ("Center Mask Preview", Float) = 0
+        _PhysicalCenterArtifacts ("Physical Center Artifacts", Float) = 1
+        _CenterArtifactOverrideEnabled ("Center Artifact Override Enabled", Float) = 0
+        _CenterArtifactOverrideRadius ("Center Artifact Override Radius", Float) = 0.115
+        _CenterArtifactOverrideMode ("Center Artifact Override Mode", Float) = 0
+        _OpticalDensity ("Optical Density", Float) = 0.76
+        _VisualNoiseAmount ("Visual Noise Amount", Float) = 0.045
         _ForegroundWeight ("Foreground Weight", Float) = 0.72
         _MidgroundWeight ("Midground Weight", Float) = 0.9
         _BackgroundWeight ("Background Weight", Float) = 0.42
@@ -49,59 +75,82 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
         _SeamFeatherWidth ("Seam Feather Width", Float) = 0.04
         _ContinuityCorrection ("Continuity Correction", Float) = 0.32
         _RadialEdgeSoftness ("Radial Edge Softness", Float) = 0.035
+        _SeamAntialiasingEnabled ("Seam Antialiasing Enabled", Float) = 1
+        _SeamAAWidth ("Seam AA Width", Float) = 0.012
+        _SeamLineSuppression ("Seam Line Suppression", Float) = 0.72
+        _HighSpeedSpinAAEnabled ("High Speed Spin AA Enabled", Float) = 1
+        _HighSpeedSeamSoftening ("High Speed Seam Softening", Float) = 0
         _MaskEnabled ("Mask Enabled", Float) = 1
         _MaskMode ("Mask Mode", Float) = 1
         _MaskRadius ("Mask Radius", Float) = 0.72
         _MaskSoftness ("Mask Softness", Float) = 0.16
-        _MaskDarkness ("Mask Darkness", Float) = 0.82
+        _MaskDarkness ("Mask Darkness", Float) = 0.58
         _HexMaskRotation ("Hex Mask Rotation", Float) = 0
         _VignetteEnabled ("Vignette Enabled", Float) = 1
-        _VignetteStrength ("Vignette Strength", Float) = 0.2
+        _VignetteStrength ("Vignette Strength", Float) = 0.12
         _VignetteSoftness ("Vignette Softness", Float) = 0.72
-        _EdgeDarkening ("Edge Darkening", Float) = 0.16
+        _EdgeDarkening ("Edge Darkening", Float) = 0.08
         _OpticalMaskFeather ("Optical Mask Feather", Float) = 0.05
-        _LensImperfectionStrength ("Lens Imperfection Strength", Float) = 0.012
-        _RubyWeight ("Ruby Weight", Float) = 0.72
-        _EmeraldWeight ("Emerald Weight", Float) = 1.08
-        _OpalWeight ("Opal Weight", Float) = 1.04
-        _QuartzWeight ("Quartz Weight", Float) = 0.92
-        _SaturationCompression ("Saturation Compression", Float) = 0.28
-        _HighlightColorBias ("Highlight Color Bias", Color) = (0.82, 0.9, 1, 1)
-        _Brightness ("Brightness", Float) = 1
-        _Contrast ("Contrast", Float) = 1
-        _Saturation ("Saturation", Float) = 1
+        _LensImperfectionStrength ("Lens Imperfection Strength", Float) = 0.006
+        _RubyWeight ("Ruby Weight", Float) = 0.9
+        _EmeraldWeight ("Emerald Weight", Float) = 1.18
+        _OpalWeight ("Opal Weight", Float) = 1.14
+        _QuartzWeight ("Quartz Weight", Float) = 1.02
+        _SaturationCompression ("Saturation Compression", Float) = 0.16
+        _HighlightColorBias ("Highlight Color Bias", Color) = (1, 0.92, 0.84, 1)
+        _Brightness ("Brightness", Float) = 1.16
+        _Contrast ("Contrast", Float) = 1.16
+        _Saturation ("Saturation", Float) = 1.22
+        _Vibrance ("Vibrance", Float) = 1.15
+        _Gamma ("Gamma", Float) = 0.95
+        _BlackLevel ("Black Level", Float) = 0.02
+        _WhiteLevel ("White Level", Float) = 1.1
+        _Sharpness ("Sharpness", Float) = 0.15
         _OrganicTime ("Organic Time", Float) = 0
         _WobbleEnabled ("Wobble Enabled", Float) = 1
-        _WobbleStrength ("Wobble Strength", Float) = 0.012
+        _WobbleStrength ("Wobble Strength", Float) = 0.0035
         _WobbleSpeed ("Wobble Speed", Float) = 0.8
         _BreathingEnabled ("Breathing Enabled", Float) = 1
-        _BreathingAmplitude ("Breathing Amplitude", Float) = 0.012
+        _BreathingAmplitude ("Breathing Amplitude", Float) = 0.006
         _BreathingSpeed ("Breathing Speed", Float) = 0.28
         _CenterDriftEnabled ("Center Drift Enabled", Float) = 1
-        _CenterDriftStrength ("Center Drift Strength", Float) = 0.008
+        _CenterDriftStrength ("Center Drift Strength", Float) = 0.0025
         _CenterDriftSpeed ("Center Drift Speed", Float) = 0.22
         _SegmentVariationEnabled ("Segment Variation Enabled", Float) = 1
-        _SegmentAngleVariation ("Segment Angle Variation", Float) = 0.01
-        _SegmentBrightnessVariation ("Segment Brightness Variation", Float) = 0.035
+        _SegmentAngleVariation ("Segment Angle Variation", Float) = 0.003
+        _SegmentBrightnessVariation ("Segment Brightness Variation", Float) = 0.018
         _TemporalDriftEnabled ("Temporal Drift Enabled", Float) = 1
         _DriftSpeed ("Drift Speed", Float) = 0.08
-        _DriftAmount ("Drift Amount", Float) = 0.01
+        _DriftAmount ("Drift Amount", Float) = 0.003
         _AsymmetryEnabled ("Asymmetry Enabled", Float) = 1
-        _AsymmetryStrength ("Asymmetry Strength", Float) = 0.009
-        _TemporalDriftAmount ("Temporal Drift Amount", Float) = 0.012
-        _RotationalDrift ("Rotational Drift", Float) = 0.008
-        _ScaleDrift ("Scale Drift", Float) = 0.01
-        _OpticalBreathingAmount ("Optical Breathing Amount", Float) = 0.01
+        _AsymmetryStrength ("Asymmetry Strength", Float) = 0.003
+        _TemporalDriftAmount ("Temporal Drift Amount", Float) = 0.0025
+        _RotationalDrift ("Rotational Drift", Float) = 0.0015
+        _ScaleDrift ("Scale Drift", Float) = 0.0025
+        _OpticalBreathingAmount ("Optical Breathing Amount", Float) = 0.004
         _DirtyGlassEnabled ("Dirty Glass Enabled", Float) = 1
-        _DirtyGlassStrength ("Dirty Glass Strength", Float) = 0.018
+        _DirtyGlassStrength ("Dirty Glass Strength", Float) = 0.01
         _DirtyGlassScale ("Dirty Glass Scale", Float) = 120
+        _DirectTextureSource ("Direct Texture Source", Float) = 0
+        _AnimatedImageSource ("Animated Image Source", Float) = 0
+        _SourceUvShake ("Source UV Shake", Vector) = (0, 0, 0, 0)
+        imageScrollSpeed ("imageScrollSpeed", Float) = 0.035
+        imageZoomSpeed ("imageZoomSpeed", Float) = 0.08
+        imageRotationSpeed ("imageRotationSpeed", Float) = 0.025
+        imageChangeInterval ("imageChangeInterval", Float) = 30
+        imageTransitionDuration ("imageTransitionDuration", Float) = 2
+        imageTransitionMode ("imageTransitionMode", Float) = 0
+        _ImageSourceOffset ("Image Source Offset", Vector) = (0, 0, 0, 0)
+        _ImageSourceZoom ("Image Source Zoom", Float) = 1
+        _ImageSourceRotation ("Image Source Rotation", Float) = 0
+        _ImageTransitionProgress ("Image Transition Progress", Float) = 0
+        _ImageMobiusDrift ("Image Mobius Drift", Float) = 0.018
     }
 
     SubShader
     {
         Tags
         {
-            "RenderPipeline" = "HDRenderPipeline"
             "Queue" = "Transparent"
             "RenderType" = "Transparent"
         }
@@ -122,8 +171,13 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
             #include "UnityCG.cginc"
 
             sampler2D _SourceTex;
+            sampler2D _SourceTexB;
 
             float _PreviewSource;
+            float _RenderPixelationFactor;
+            float colorDepthMode;
+            float colorSteps;
+            float paletteQuantizationStrength;
             float _SegmentCount;
             float _Rotation;
             float _Zoom;
@@ -143,6 +197,8 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
             float _CenterBrightness;
             float _CenterVignette;
             float _CenterStabilization;
+            float _CenterMaskEnabled;
+            float _CenterMaskMode;
             float _CenterMaskRadius;
             float _CenterExposure;
             float _CenterFalloff;
@@ -150,6 +206,25 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
             float _CenterGradientStrength;
             float _CenterDetailBoost;
             float _CenterBloomLimit;
+            float _CenterCleanEnabled;
+            float _CenterCleanRadius;
+            float _CenterCleanFeather;
+            float _CenterReconstructFromTexture;
+            float _CenterPatternContinuation;
+            float _CenterFillMode;
+            float _CenterWorkRadius;
+            float _CenterWorkFeather;
+            float _CenterBlendStrength;
+            float _CenterContinuationStrength;
+            float _CenterDetailAmount;
+            float _CenterSampleScale;
+            float _CenterReconstructionQuality;
+            float _CenterOnlyDebugMode;
+            float _CenterMaskPreview;
+            float _PhysicalCenterArtifacts;
+            float _CenterArtifactOverrideEnabled;
+            float _CenterArtifactOverrideRadius;
+            float _CenterArtifactOverrideMode;
             float _OpticalDensity;
             float _VisualNoiseAmount;
             float _ForegroundWeight;
@@ -169,6 +244,11 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
             float _SeamFeatherWidth;
             float _ContinuityCorrection;
             float _RadialEdgeSoftness;
+            float _SeamAntialiasingEnabled;
+            float _SeamAAWidth;
+            float _SeamLineSuppression;
+            float _HighSpeedSpinAAEnabled;
+            float _HighSpeedSeamSoftening;
             float _MaskEnabled;
             float _MaskMode;
             float _MaskRadius;
@@ -190,6 +270,11 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
             float _Brightness;
             float _Contrast;
             float _Saturation;
+            float _Vibrance;
+            float _Gamma;
+            float _BlackLevel;
+            float _WhiteLevel;
+            float _Sharpness;
             float _OrganicTime;
             float _WobbleEnabled;
             float _WobbleStrength;
@@ -215,6 +300,20 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
             float _DirtyGlassEnabled;
             float _DirtyGlassStrength;
             float _DirtyGlassScale;
+            float _DirectTextureSource;
+            float _AnimatedImageSource;
+            float4 _SourceUvShake;
+            float imageScrollSpeed;
+            float imageZoomSpeed;
+            float imageRotationSpeed;
+            float imageChangeInterval;
+            float imageTransitionDuration;
+            float imageTransitionMode;
+            float4 _ImageSourceOffset;
+            float _ImageSourceZoom;
+            float _ImageSourceRotation;
+            float _ImageTransitionProgress;
+            float _ImageMobiusDrift;
 
             struct Attributes
             {
@@ -238,10 +337,19 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
 
             float3 ApplyColor(float3 color)
             {
+                color = max(0.0, color - _BlackLevel);
+                color /= max(0.001, _WhiteLevel - _BlackLevel);
                 color *= _Brightness;
+                float gammaValue = max(0.01, _Gamma);
+                color = pow(max(0.0, color), float3(gammaValue, gammaValue, gammaValue));
                 color = (color - 0.5) * _Contrast + 0.5;
                 float luminance = dot(color, float3(0.2126, 0.7152, 0.0722));
-                color = lerp(luminance.xxx, color, _Saturation);
+                float maxChannel = max(color.r, max(color.g, color.b));
+                float minChannel = min(color.r, min(color.g, color.b));
+                float chroma = saturate(maxChannel - minChannel);
+                float vibranceBoost = 1.0 + max(0.0, _Vibrance - 1.0) * (1.0 - chroma);
+                color = lerp(luminance.xxx, color, _Saturation * vibranceBoost);
+                color = lerp(color, luminance.xxx + (color - luminance.xxx) * (1.0 + _Sharpness), saturate(_Sharpness));
                 return saturate(color);
             }
 
@@ -267,8 +375,69 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
                 return 1.0 - abs(frac(uv) * 2.0 - 1.0);
             }
 
+            float2 TransformDirectImageUV(float2 uv, float transitionOffset)
+            {
+                float2 centered = uv - 0.5;
+                float mobius = sin((centered.x - centered.y) * 9.0 + _OrganicTime * 0.37) * _ImageMobiusDrift;
+                centered += float2(centered.y, centered.x) * mobius;
+                centered = Rotate2D(centered, _ImageSourceRotation);
+                centered /= max(0.001, _ImageSourceZoom);
+                return centered + 0.5 + _ImageSourceOffset.xy + float2(0.0, transitionOffset);
+            }
+
+            float4 SampleDirectImageSource(float2 uv)
+            {
+                float progress = saturate(_ImageTransitionProgress);
+                float easedProgress = smoothstep(0.0, 1.0, progress);
+                float mode = imageTransitionMode;
+
+                float2 uvA = TransformDirectImageUV(uv, 0.0);
+                float2 uvB = TransformDirectImageUV(uv, 0.0);
+
+                if (mode >= 1.5 && mode < 2.5)
+                {
+                    uvA = TransformDirectImageUV(uv, easedProgress);
+                    uvB = TransformDirectImageUV(uv, easedProgress - 1.0);
+                }
+                else if (mode >= 2.5)
+                {
+                    float roll = easedProgress * 0.5;
+                    uvA = TransformDirectImageUV(uv, roll);
+                    uvB = TransformDirectImageUV(uv, roll - 0.5);
+                }
+
+                float4 a = tex2D(_SourceTex, MirrorRepeatUV(uvA));
+                if (progress <= 0.0001)
+                {
+                    return a;
+                }
+
+                float4 b = tex2D(_SourceTexB, MirrorRepeatUV(uvB));
+                if (mode >= 0.5 && mode < 1.5)
+                {
+                    float dissolve = Hash21(floor(uv * 260.0));
+                    float dissolveMask = smoothstep(easedProgress - 0.08, easedProgress + 0.08, dissolve);
+                    return lerp(a, b, dissolveMask);
+                }
+
+                return lerp(a, b, easedProgress);
+            }
+
             float4 SampleSource(float2 uv)
             {
+                uv += _SourceUvShake.xy;
+                float pixelation = max(1.0, _RenderPixelationFactor);
+                if (pixelation > 1.001)
+                {
+                    float2 pixelGrid = max(float2(16.0, 16.0), _ScreenParams.xy / pixelation);
+                    uv = (floor(uv * pixelGrid) + 0.5) / pixelGrid;
+                }
+
+                if (_DirectTextureSource > 0.5 && _AnimatedImageSource > 0.5)
+                {
+                    return SampleDirectImageSource(uv);
+                }
+
                 float2 centered = uv - 0.5;
                 float radius = length(centered);
                 float2 direction = normalize(centered + float2(0.0001, 0.0001));
@@ -279,6 +448,42 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
                 float edgeBlend = smoothstep(0.44, 0.72, radius) * _EdgeRecursionBlend;
                 float2 finalUv = lerp(saturate(overscannedUv), recursiveUv, edgeBlend);
                 return tex2D(_SourceTex, saturate(finalUv));
+            }
+
+            float3 ApplyColorDepthQuantization(float3 color)
+            {
+                float strength = saturate(paletteQuantizationStrength);
+                if (strength <= 0.0001 || colorDepthMode >= 10.0)
+                {
+                    return color;
+                }
+
+                float steps = max(2.0, colorSteps);
+                float3 sourceColor = saturate(color);
+                float luminance = dot(sourceColor, float3(0.2126, 0.7152, 0.0722));
+                float3 quantized;
+
+                if (steps <= 2.5)
+                {
+                    quantized = luminance >= 0.5
+                        ? float3(0.96, 0.92, 0.82)
+                        : float3(0.025, 0.028, 0.034);
+                }
+                else
+                {
+                    float channelLevels = max(2.0, floor(pow(steps, 0.3333333) + 0.5));
+                    quantized = floor(sourceColor * (channelLevels - 1.0) + 0.5) / (channelLevels - 1.0);
+
+                    if (steps <= 16.5)
+                    {
+                        float lumaLevels = max(2.0, steps);
+                        float lumaQuantized = floor(luminance * (lumaLevels - 1.0) + 0.5) / (lumaLevels - 1.0);
+                        float chromaPreservation = saturate((steps - 2.0) / 14.0);
+                        quantized = lerp(lumaQuantized.xxx, quantized, chromaPreservation);
+                    }
+                }
+
+                return lerp(color, quantized, strength);
             }
 
             float3 ApplyPaletteHierarchy(float3 color)
@@ -363,9 +568,11 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
                 const float TwoPi = 6.28318530718;
                 float angleDrivenSegments = round(360.0 / max(1.0, _MirrorAngleDegrees));
                 float segments = _UseMirrorAngleMode > 0.5 ? angleDrivenSegments : round(_SegmentCount);
-                segments = clamp(segments, 1.0, 24.0);
+                segments = clamp(segments, 1.0, 64.0);
                 float wedge = TwoPi / segments;
                 float organicTime = _OrganicTime;
+                float centerMaskActive = (_CenterMaskEnabled > 0.5 && _DirectTextureSource < 0.5) ? 1.0 : 0.0;
+                float effectiveCenterMaskRadius = lerp(0.0001, max(0.0001, _CenterMaskRadius), centerMaskActive);
 
                 float2 organicCenter = _CenterOffset.xy;
                 if (_CenterDriftEnabled > 0.5)
@@ -385,7 +592,8 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
 
                 float2 centered = (input.uv - 0.5 - organicCenter) / max(0.001, _Zoom * breathing);
                 float radius = length(centered);
-                float centerInfluence = 1.0 - smoothstep(_CenterMaskRadius * 0.35, _CenterMaskRadius, radius);
+                float screenRadius = length(input.uv - 0.5);
+                float centerInfluence = centerMaskActive * (1.0 - smoothstep(effectiveCenterMaskRadius * 0.35, effectiveCenterMaskRadius, radius));
                 float2 stabilizedCentered = (input.uv - 0.5 - _CenterOffset.xy) / max(0.001, _Zoom * breathing);
                 centered = lerp(centered, stabilizedCentered, centerInfluence * _CenterStabilization);
                 radius = lerp(radius, length(centered) / max(0.001, _CenterScale), centerInfluence);
@@ -430,9 +638,10 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
                 }
 
                 float edgeDistance = min(localAngle, wedge - localAngle) / max(0.0001, wedge);
-                float seamFeather = max(max(0.0001, _SeamSoftness + _SeamFeatherWidth), fwidth(edgeDistance) * (1.5 + _SeamSmoothingQuality));
+                float seamAA = _SeamAntialiasingEnabled > 0.5 ? _SeamAAWidth + _HighSpeedSeamSoftening : 0.0;
+                float seamFeather = max(max(0.0001, _SeamSoftness + _SeamFeatherWidth + seamAA), fwidth(edgeDistance) * (2.2 + _SeamSmoothingQuality));
                 float seamMask = smoothstep(0.0, seamFeather, edgeDistance);
-                localAngle = lerp(wedge * 0.5, localAngle, lerp(1.0, seamMask, _SeamBlendStrength));
+                localAngle = lerp(wedge * 0.5, localAngle, lerp(1.0, seamMask, _SeamBlendStrength * (1.0 - _SeamLineSuppression * 0.35)));
 
                 float normalizedAngle = localAngle / wedge;
                 float foldedAngle = (normalizedAngle - 0.5) * wedge;
@@ -457,12 +666,60 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
                 }
 
                 float2 rayDirection = normalize(sampleVector + float2(0.0001, 0.0001));
-                float innerContinuity = (1.0 - smoothstep(_CenterMaskRadius * 0.3, _CenterMaskRadius * 1.8, radius)) * _CenterConvergenceStrength;
-                float continuationRadius = max(distortedRadius, _CenterMaskRadius * (0.52 + _RadialContinuation));
+                float physicalInnerContinuity = (1.0 - smoothstep(effectiveCenterMaskRadius * 0.3, effectiveCenterMaskRadius * 1.8, radius)) * _CenterConvergenceStrength;
+                float innerContinuity = lerp(physicalInnerContinuity, _CenterConvergenceStrength, _DirectTextureSource);
+                float continuationRadius = lerp(max(distortedRadius, effectiveCenterMaskRadius * (0.52 + _RadialContinuation)), distortedRadius, _DirectTextureSource);
                 float2 continuationUV = 0.5 + rayDirection * continuationRadius + organicCenter;
                 sampleUV = lerp(sampleUV, continuationUV, innerContinuity * 0.38);
 
                 float4 color = SampleSource(sampleUV);
+                float centerWorkMask = _CenterWorkRadius > 0.0001
+                    ? 1.0 - smoothstep(max(0.0001, _CenterWorkRadius), max(0.0002, _CenterWorkRadius + _CenterWorkFeather), screenRadius)
+                    : 0.0;
+                float cleanCenterMask = (_CenterCleanEnabled > 0.5 || (_DirectTextureSource > 0.5 && _PhysicalCenterArtifacts < 0.5))
+                    ? centerWorkMask
+                    : 0.0;
+                if (cleanCenterMask > 0.0001 && _CenterReconstructFromTexture > 0.5 && _CenterFillMode > 0.5)
+                {
+                    float quality = saturate(_CenterReconstructionQuality);
+                    float sampleScale = max(0.25, _CenterSampleScale);
+                    float continuationStrength = saturate(_CenterContinuationStrength);
+                    float reconstructRadius = max(distortedRadius * sampleScale, _CenterWorkRadius * (0.85 + continuationStrength * sampleScale));
+                    float2 reconstructUV = 0.5 + rayDirection * reconstructRadius + organicCenter;
+                    float2 reconstructUVB = 0.5 + Rotate2D(rayDirection, wedge * 0.5) * reconstructRadius + organicCenter;
+                    float2 reconstructUVC = 0.5 + Rotate2D(rayDirection, -wedge * 0.5) * reconstructRadius * (1.0 + 0.1 * quality) + organicCenter;
+                    float2 reconstructUVD = 0.5 + rayDirection * reconstructRadius * (1.0 + 0.28 * quality) + organicCenter;
+                    float3 sampledFill = SampleSource(sampleUV).rgb;
+                    float3 radialFill = SampleSource(reconstructUV).rgb;
+                    float3 mirrorFill = lerp(radialFill, SampleSource(reconstructUVB).rgb, 0.5);
+                    mirrorFill = lerp(mirrorFill, SampleSource(reconstructUVC).rgb, quality * 0.35);
+                    float3 sourceResampleFill = lerp(mirrorFill, SampleSource(reconstructUVD).rgb, quality * 0.45);
+                    float3 softBlendFill = lerp(sampledFill, sourceResampleFill, saturate(0.45 + quality * 0.35));
+                    float3 reconstructed = sampledFill;
+                    reconstructed = _CenterFillMode >= 1.5 && _CenterFillMode < 2.5 ? mirrorFill : reconstructed;
+                    reconstructed = _CenterFillMode >= 2.5 && _CenterFillMode < 3.5 ? sourceResampleFill : reconstructed;
+                    reconstructed = _CenterFillMode >= 3.5 && _CenterFillMode < 4.5 ? radialFill : reconstructed;
+                    reconstructed = _CenterFillMode >= 4.5 ? softBlendFill : reconstructed;
+                    float continuation = saturate(lerp(_CenterPatternContinuation, 1.0, quality * 0.2));
+                    float centerRepairWeight = saturate(cleanCenterMask * continuation * _CenterBlendStrength * lerp(0.65, 1.0, _CenterDetailAmount));
+                    color.rgb = lerp(color.rgb, reconstructed, centerRepairWeight);
+                }
+                if (_CenterMaskPreview > 0.5)
+                {
+                    float3 previewColor = lerp(color.rgb, float3(0.1, 0.75, 1.0), centerWorkMask * 0.72);
+                    color.rgb = _CenterOnlyDebugMode > 0.5 ? lerp(color.rgb, previewColor, saturate(centerWorkMask + 0.12)) : previewColor;
+                }
+                if (_CenterArtifactOverrideEnabled > 0.5 && _DirectTextureSource > 0.5)
+                {
+                    float overrideMask = 1.0 - smoothstep(
+                        max(0.0001, _CenterArtifactOverrideRadius),
+                        max(0.0002, _CenterArtifactOverrideRadius + _CenterCleanFeather),
+                        screenRadius);
+                    overrideMask *= centerWorkMask;
+                    float overrideRadius = max(distortedRadius, _CenterArtifactOverrideRadius * 1.05);
+                    float3 cleanSource = SampleSource(0.5 + rayDirection * overrideRadius + organicCenter).rgb;
+                    color.rgb = lerp(color.rgb, cleanSource, overrideMask);
+                }
                 float sourceEdgeMask = smoothstep(0.42, 0.72, length(sampleUV - 0.5)) * _EdgeRecursionBlend;
                 if (sourceEdgeMask > 0.0001)
                 {
@@ -486,10 +743,10 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
                 float totalWeight = 1.0 + fgWeight + midWeight + bgWeight;
                 color.rgb = (color.rgb + foreground.rgb * fgWeight + midground.rgb * midWeight + background.rgb * bgWeight) / max(0.0001, totalWeight);
 
-                float centerPropagationMask = (1.0 - smoothstep(_CenterMaskRadius * 0.25, _CenterMaskRadius * 1.65, radius)) * _CenterRecursionBlend;
+                float centerPropagationMask = centerMaskActive * (1.0 - smoothstep(effectiveCenterMaskRadius * 0.25, effectiveCenterMaskRadius * 1.65, radius)) * _CenterRecursionBlend;
                 if (centerPropagationMask > 0.0001)
                 {
-                    float propagationRadius = _CenterMaskRadius * (0.72 + _RadialContinuation * 0.7) + radius * _InnerPatternPropagation;
+                    float propagationRadius = effectiveCenterMaskRadius * (0.72 + _RadialContinuation * 0.7) + radius * _InnerPatternPropagation;
                     float2 propagatedUV = 0.5 + rayDirection * propagationRadius + organicCenter;
                     float2 propagatedUVB = 0.5 + Rotate2D(rayDirection, wedge * 0.5) * propagationRadius + organicCenter;
                     float3 propagatedColor = (SampleSource(propagatedUV).rgb + SampleSource(propagatedUVB).rgb) * 0.5;
@@ -523,11 +780,10 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
                 color.rgb = ApplyPaletteHierarchy(color.rgb);
 
                 float centerLift = 1.0 + centerInfluence * (_CenterBrightness - 1.0);
-                float screenRadius = length(input.uv - 0.5);
-                float centerShade = 1.0 - smoothstep(_CenterMaskRadius, _CenterMaskRadius * 2.2, screenRadius) * _CenterVignette;
+                float centerShade = 1.0 - centerMaskActive * smoothstep(effectiveCenterMaskRadius, effectiveCenterMaskRadius * 2.2, screenRadius) * _CenterVignette;
                 color.rgb *= centerLift * centerShade;
-                float centerWeight = 1.0 - smoothstep(0.0, max(0.001, _CenterFalloff), screenRadius);
-                float centerNoise = Hash21(floor(input.uv * 190.0) + floor(organicTime * 5.0));
+                float centerWeight = centerMaskActive * (1.0 - smoothstep(0.0, max(0.001, _CenterFalloff), screenRadius));
+                float centerNoise = Hash21(floor(input.uv * 190.0));
                 float centerWave = sin(screenRadius * 58.0 - organicTime * 0.9) * 0.5 + 0.5;
                 float centerDetail = (centerNoise - 0.5) * 0.5 + centerWave * 0.25;
                 float centerGradient = 1.0 - smoothstep(0.02, max(0.03, _CenterFalloff), screenRadius);
@@ -556,6 +812,7 @@ Shader "KaleidoscopeEngine/KaleidoscopeMirror"
                 }
 
                 color.rgb = lerp(color.rgb * (1.0 - _MaskDarkness), color.rgb, mask);
+                color.rgb = ApplyColorDepthQuantization(color.rgb);
                 color.a = 1.0;
                 return color;
             }

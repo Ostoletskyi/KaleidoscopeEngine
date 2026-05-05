@@ -23,10 +23,10 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         [SerializeField] private List<GemstoneDefinition> definitions = new List<GemstoneDefinition>();
 
         [Header("Counts")]
-        [Min(0)] public int totalCount = 148;
+        [Min(0)] public int totalCount = 80;
         [Range(0f, 0.9f)] public float microParticleRatio = 0.56f;
         [SerializeField, Min(0)] private int mediumShardCount = 52;
-        private const int DefaultTotalCount = 156;
+        private const int DefaultTotalCount = 80;
         private const float DefaultMicroParticleRatio = 0.58f;
         private const int DefaultMediumShardCount = 52;
 
@@ -58,14 +58,14 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         private const float DefaultSourceCoverageTarget = 0.82f;
         private const float DefaultShardFieldMultiplier = 1.24f;
         private const int DefaultOpticalFillerParticles = 38;
-        private const int MaxQualityTotalCount = 420;
+        private const int MaxQualityTotalCount = 100;
 
         [Header("Source Visibility Targets")]
         [SerializeField] private EntropyDensityPreset densityPreset = EntropyDensityPreset.Packed;
-        [SerializeField, Min(0)] private int heroGemCount = 5;
-        [SerializeField, Min(0)] private int visibleLargeGemTarget = 5;
-        [SerializeField, Min(0)] private int visibleMediumShardTarget = 125;
-        [SerializeField, Min(0)] private int visibleMicroCrystalTarget = 220;
+        [SerializeField, Min(0)] private int heroGemCount = 4;
+        [SerializeField, Min(0)] private int visibleLargeGemTarget = 4;
+        [SerializeField, Min(0)] private int visibleMediumShardTarget = 42;
+        [SerializeField, Min(0)] private int visibleMicroCrystalTarget = 54;
         [SerializeField, Min(0)] private int visibleSparkleTarget = 72;
         [SerializeField] private Camera sourceVisibilityCamera;
         [SerializeField] private bool refillSourceFrustumAfterSpawn = true;
@@ -74,20 +74,23 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
         [Header("Rear Wall Packing Layer")]
         [SerializeField] private bool rearWallFillEnabled = true;
+        [SerializeField] private PackedRearCrystalCassette packedRearCassette;
+        [SerializeField] private LightweightCrystalField lightweightCrystalField;
+        [SerializeField] private OpticalMixingChamber opticalMixingChamber;
         [SerializeField, Min(0)] private int rearWallFillCount = 140;
-        [SerializeField, Range(0.02f, 0.6f)] private float rearWallFillDepth = 0.22f;
+        [SerializeField, Range(0.02f, 0.6f)] private float rearWallFillDepth = 0.5f;
         [SerializeField, Range(0.1f, 2f)] private float rearWallFillRadius = 0.92f;
-        [SerializeField] private bool visualOnlyMicroChips = true;
+        [SerializeField] private bool visualOnlyMicroChips;
         [SerializeField, Min(0)] private int visualOnlyChipCount = 190;
         [SerializeField, Min(0)] private int visualMicroChipCount = 2000;
         [SerializeField, Range(0.004f, 0.12f)] private float visualMicroChipScale = 0.032f;
         [SerializeField, Range(0.1f, 3f)] private float rearWallChipDensity = 1.35f;
-        [SerializeField, Range(0.02f, 0.8f)] private float chipLayerDepth = 0.34f;
+        [SerializeField, Range(0.02f, 0.8f)] private float chipLayerDepth = 0.5f;
         [SerializeField, Range(0f, 1f)] private float chipRandomRotation = 1f;
         [SerializeField, Range(0f, 1f)] private float chipColorVariation = 0.72f;
         [SerializeField, Range(0f, 1f)] private float chipSparkleVariation = 0.42f;
-        [SerializeField, Min(0)] private int physicsMicroCrystalCount = 160;
-        [SerializeField, Min(0)] private int mediumShardBoost = 85;
+        [SerializeField, Min(0)] private int physicsMicroCrystalCount = 34;
+        [SerializeField, Min(0)] private int mediumShardBoost = 16;
         [SerializeField, Range(0f, 1f)] private float largeGemReduction = 0.55f;
 
         [Header("Scale Rebalance")]
@@ -127,6 +130,10 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             new List<Matrix4x4>(),
             new List<Matrix4x4>(),
             new List<Matrix4x4>(),
+            new List<Matrix4x4>(),
+            new List<Matrix4x4>(),
+            new List<Matrix4x4>(),
+            new List<Matrix4x4>(),
             new List<Matrix4x4>()
         };
         private System.Random random;
@@ -142,6 +149,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         private Material[] visualMicroChipMaterials;
         private int visualMicroChipLayer;
         private readonly Matrix4x4[] instancedChipDrawBuffer = new Matrix4x4[InstancedChipBatchSize];
+        private bool physicalArtifactRenderingSuppressed;
 
         public IReadOnlyList<GameObject> SpawnedObjects => spawnedObjects;
         public int ActiveSeed => activeSeed;
@@ -170,6 +178,9 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         public int VisibleEntropyTarget => visibleLargeGemTarget + visibleMediumShardTarget + visibleMicroCrystalTarget;
         public int LastVisibilityRefillCount => lastVisibilityRefillCount;
         public bool RearWallFillEnabled => rearWallFillEnabled;
+        public PackedRearCrystalCassette PackedRearCassette => packedRearCassette;
+        public LightweightCrystalField LightweightField => lightweightCrystalField;
+        public OpticalMixingChamber MixingChamber => opticalMixingChamber;
         public int RearWallFillCount => rearWallFillCount;
         public float RearWallFillDepth => rearWallFillDepth;
         public float RearWallFillRadius => rearWallFillRadius;
@@ -178,6 +189,12 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         public int VisualMicroChipCount => visualMicroChipCount;
         public int RequestedVisualMicroChipCount => visualMicroChipCount;
         public int EffectiveVisualMicroChipCount => EffectiveVisualChipCount;
+        public int LightweightVisualCrystalCount => lightweightCrystalField != null ? lightweightCrystalField.VisualCrystalCount : 0;
+        public int CrystalsInSourceTexture => lightweightCrystalField != null ? lightweightCrystalField.CrystalsInSourceTexture : 0;
+        public int CrystalsVisibleToSourceCamera => lightweightCrystalField != null ? lightweightCrystalField.CrystalsVisibleToSourceCamera : 0;
+        public int CrystalsRenderedAfterMirrorPass => lightweightCrystalField != null ? lightweightCrystalField.CrystalsRenderedAfterMirrorPass : 0;
+        public bool PhysicalArtifactRenderingSuppressed => physicalArtifactRenderingSuppressed;
+        public int CenterArtifactRendererCount => CountCenterArtifactRenderers();
         public float VisualMicroChipScale => visualMicroChipScale;
         public float RearWallChipDensity => rearWallChipDensity;
         public float ChipLayerDepth => chipLayerDepth;
@@ -209,6 +226,20 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             sourceVisibilityCamera = camera;
         }
 
+        public void SetOpticalMixingChamber(OpticalMixingChamber chamber)
+        {
+            opticalMixingChamber = chamber;
+            if (opticalMixingChamber != null)
+            {
+                rearWallFillDepth = Mathf.Clamp(opticalMixingChamber.ChamberDepth, 0.3f, 0.8f);
+                chipLayerDepth = rearWallFillDepth;
+                rearWallFillRadius = opticalMixingChamber.ChamberRadius;
+                cylinderRadius = opticalMixingChamber.ChamberRadius;
+                cylinderLength = opticalMixingChamber.ChamberDepth;
+                spawnInsideCylinder = true;
+            }
+        }
+
         public void SetAdaptiveVisualMicroChipLimit(int maxVisibleChips)
         {
             effectiveVisualMicroChipCount = Mathf.Clamp(maxVisibleChips, 0, Mathf.Max(0, visualMicroChipCount));
@@ -217,6 +248,64 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         public void ClearAdaptiveVisualMicroChipLimit()
         {
             effectiveVisualMicroChipCount = -1;
+        }
+
+        public void SetPhysicalArtifactRenderingSuppressed(bool suppressed)
+        {
+            physicalArtifactRenderingSuppressed = suppressed;
+            SetSpawnedRenderersEnabled(!suppressed);
+        }
+
+        public void SetLightweightFieldActive(bool active)
+        {
+            EnsurePackedRearCassette();
+            if (lightweightCrystalField != null)
+            {
+                lightweightCrystalField.SetFieldActive(active);
+            }
+        }
+
+        public void ValidateLightweightCrystalPipeline(Camera sourceCamera, Camera viewerCamera)
+        {
+            lightweightCrystalField?.ValidateCameraParticipation(sourceCamera, viewerCamera);
+        }
+
+        public void ApplyVisualPileShake(float strength)
+        {
+            lightweightCrystalField?.ApplyPileShake(strength);
+        }
+
+        public void KillAllCenterArtifacts()
+        {
+            EnsurePackedRearCassette();
+            for (int i = 0; i < spawnedObjects.Count; i++)
+            {
+                GameObject instance = spawnedObjects[i];
+                if (instance == null)
+                {
+                    continue;
+                }
+
+                bool insideCassette = IsInsidePackedRearCassette(instance.transform.position);
+                if (!insideCassette)
+                {
+                    Renderer[] renderers = instance.GetComponentsInChildren<Renderer>(true);
+                    for (int rendererIndex = 0; rendererIndex < renderers.Length; rendererIndex++)
+                    {
+                        if (renderers[rendererIndex] != null)
+                        {
+                            renderers[rendererIndex].enabled = false;
+                        }
+                    }
+
+                    Rigidbody body = instance.GetComponent<Rigidbody>();
+                    if (body != null)
+                    {
+                        body.Sleep();
+                        body.isKinematic = true;
+                    }
+                }
+            }
         }
 
         private void Start()
@@ -281,6 +370,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
             activeSeed = randomSeed > 0 ? randomSeed : UnityEngine.Random.Range(1, int.MaxValue);
             random = new System.Random(activeSeed);
+            EnsurePackedRearCassette();
             ApplyDensityPreset(densityPreset, false);
 
             int gemLayer = ResolveLayer(gemLayerName);
@@ -288,6 +378,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             dominantGemCount = 0;
             lastVisibilityRefillCount = 0;
             microParticleRatio = Mathf.Clamp01(Mathf.Max(microParticleRatio, microCrystalDensity));
+            totalCount = Mathf.Clamp(totalCount, 40, MaxQualityTotalCount);
             int targetMediumShards = Mathf.Clamp(mediumShardCount + mediumShardBoost, 0, totalCount);
             int fillerStartIndex = Mathf.Max(0, totalCount - opticalFillerParticles);
             int mediumSpawned = 0;
@@ -310,7 +401,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
                     continue;
                 }
 
-                bool rearBias = rearWallFillEnabled && i < rearWallFillCount;
+                bool rearBias = rearWallFillEnabled;
                 GameObject instance = SpawnPhysicsInstance(definition, i, gemLayer, microLayer, rearBias);
                 if (instance == null)
                 {
@@ -345,6 +436,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
                 {
                     geometryAssigner?.Release(spawnedObjects[i]);
                     materialAssigner?.Release(spawnedObjects[i]);
+                    KaleidoscopeEngine.Performance.KaleidoscopeRebuildGuard.RecordGameObjectDestroy("GemstoneSpawner.Clear");
                     Destroy(spawnedObjects[i]);
                 }
             }
@@ -359,6 +451,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
         public void Respawn()
         {
+            KaleidoscopeEngine.Performance.KaleidoscopeRebuildGuard.RecordFullRespawn("GemstoneSpawner.Respawn");
             Spawn();
         }
 
@@ -369,7 +462,23 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             microCrystalDensity = Mathf.Clamp01(microCrystalDensity + Mathf.Sign(countDelta) * 0.025f);
             microParticleRatio = Mathf.Clamp(microParticleRatio + Mathf.Sign(countDelta) * 0.025f, 0.1f, 0.85f);
             BalanceEntropyCoverage(false);
-            Respawn();
+            ApplyDensityWithoutRespawn(countDelta);
+        }
+
+        public void ApplyDensityWithoutRespawn(int countDelta)
+        {
+            int chipDelta = Mathf.RoundToInt(countDelta * 18f);
+            visualMicroChipCount = Mathf.Clamp(visualMicroChipCount + chipDelta, 0, qualityVisualMicroChipLimit * 3);
+            visualOnlyChipCount = visualMicroChipCount;
+            if (effectiveVisualMicroChipCount >= 0)
+            {
+                effectiveVisualMicroChipCount = Mathf.Clamp(effectiveVisualMicroChipCount + chipDelta, 0, visualMicroChipCount);
+            }
+
+            if (spawnedObjects.Count == 0 && spawnOnStart)
+            {
+                Spawn();
+            }
         }
 
         public void ApplyQualityProfile(KaleidoscopeQualityProfile profile, bool respawn)
@@ -382,10 +491,12 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             microCrystalDensity = Mathf.Clamp01(Mathf.Max(profile.microDetailDensity, DefaultMicroCrystalDensity * 0.7f));
             densityDistribution = Mathf.Clamp01(Mathf.Lerp(DefaultDensityDistribution, 0.86f, Mathf.Clamp01(profile.sourceCoverageTarget)));
             visualNoiseAmount = Mathf.Clamp(profile.microDetailDensity * 0.12f, 0.04f, 0.22f);
-            totalCount = Mathf.Clamp(Mathf.RoundToInt(DefaultTotalCount * shardFieldMultiplier) + opticalFillerParticles, 64, MaxQualityTotalCount);
+            totalCount = Mathf.Clamp(Mathf.RoundToInt(DefaultTotalCount * Mathf.Min(shardFieldMultiplier, 1.1f)), 40, MaxQualityTotalCount);
             mediumShardCount = Mathf.Clamp(Mathf.RoundToInt(DefaultMediumShardCount * Mathf.Lerp(1f, shardFieldMultiplier, 0.85f)), 12, totalCount);
             microParticleRatio = Mathf.Clamp(Mathf.Max(DefaultMicroParticleRatio, microCrystalDensity * 0.92f), 0.2f, 0.88f);
             qualityVisualMicroChipLimit = ResolveVisualChipLimit(profile.level);
+            packedRearCassette?.ApplyQuality(MapQuality(profile.level));
+            lightweightCrystalField?.ApplyQuality(profile.level);
             visualMicroChipCount = Mathf.Max(visualMicroChipCount, qualityVisualMicroChipLimit);
             visualOnlyChipCount = visualMicroChipCount;
             BalanceEntropyCoverage(false);
@@ -403,26 +514,32 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             switch (densityPreset)
             {
                 case EntropyDensityPreset.Sparse:
-                    SetDensityPresetValues(8, 40, 70, 24, 30, 200, 45, 18, 0.15f, 0.78f, 0.92f, 1.08f, 0.38f, 0.58f);
+                    SetDensityPresetValues(4, 22, 32, 24, 64, 200, 14, 8, 0.15f, 0.78f, 0.92f, 1.08f, 0.38f, 0.58f);
                     break;
                 case EntropyDensityPreset.Normal:
-                    SetDensityPresetValues(8, 64, 110, 36, 60, 500, 70, 32, 0.25f, 0.72f, 0.9f, 1.12f, 0.34f, 0.64f);
+                    SetDensityPresetValues(4, 30, 40, 36, 80, 1000, 22, 12, 0.25f, 0.72f, 0.9f, 1.12f, 0.34f, 0.64f);
                     break;
                 case EntropyDensityPreset.Dense:
-                    SetDensityPresetValues(7, 92, 155, 52, 96, 1000, 110, 55, 0.38f, 0.64f, 0.86f, 1.18f, 0.3f, 0.72f);
+                    SetDensityPresetValues(4, 38, 48, 52, 92, 2500, 30, 16, 0.38f, 0.64f, 0.86f, 1.18f, 0.3f, 0.72f);
+                    rearWallFillDepth = 0.3f;
+                    chipLayerDepth = 0.3f;
                     break;
                 case EntropyDensityPreset.Extreme:
-                    SetDensityPresetValues(3, 165, 310, 96, 210, 5200, 230, 120, 0.72f, 0.42f, 0.72f, 1.32f, 0.2f, 0.9f);
+                    SetDensityPresetValues(4, 46, 50, 96, 100, 5200, 34, 18, 0.72f, 0.42f, 0.72f, 1.32f, 0.2f, 0.9f);
+                    rearWallFillDepth = 0.3f;
+                    chipLayerDepth = 0.3f;
                     break;
                 default:
-                    SetDensityPresetValues(5, 125, 220, 72, 140, 2000, 160, 85, 0.55f, 0.52f, 0.78f, 1.26f, 0.24f, 0.82f);
+                    SetDensityPresetValues(4, 42, 54, 72, 96, 3500, 34, 16, 0.55f, 0.52f, 0.78f, 1.26f, 0.24f, 0.82f);
+                    rearWallFillDepth = 0.5f;
+                    chipLayerDepth = 0.5f;
                     break;
             }
 
             int minimumPhysicsPopulation = visibleLargeGemTarget +
                 Mathf.RoundToInt((visibleMediumShardTarget + mediumShardBoost) * 0.72f) +
                 physicsMicroCrystalCount;
-            totalCount = Mathf.Clamp(Mathf.Max(totalCount, minimumPhysicsPopulation), 64, MaxQualityTotalCount);
+            totalCount = Mathf.Clamp(Mathf.Max(totalCount, minimumPhysicsPopulation), 40, MaxQualityTotalCount);
             mediumShardCount = Mathf.Clamp(Mathf.Max(mediumShardCount, visibleMediumShardTarget), 12, totalCount);
             microParticleRatio = Mathf.Clamp(Mathf.Max(microParticleRatio, microCrystalDensity), 0.2f, 0.92f);
             opticalFillerParticles = Mathf.Clamp(Mathf.Max(opticalFillerParticles, physicsMicroCrystalCount / 3), 0, 180);
@@ -460,6 +577,44 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             }
         }
 
+        public void EnsureViewerDensityFloor(bool respawn)
+        {
+            bool changed = false;
+            if (densityPreset < EntropyDensityPreset.Packed)
+            {
+                ApplyDensityPreset(EntropyDensityPreset.Packed, false);
+                changed = true;
+            }
+
+            int targetVisualChips = Mathf.Max(visualMicroChipCount, 3500);
+            int targetRearFill = Mathf.Max(rearWallFillCount, 96);
+            int targetMedium = Mathf.Max(mediumShardCount, 42);
+            int targetFiller = Mathf.Max(opticalFillerParticles, 24);
+            if (visualMicroChipCount < targetVisualChips ||
+                rearWallFillCount < targetRearFill ||
+                mediumShardCount < targetMedium ||
+                opticalFillerParticles < targetFiller ||
+                sourceCoverageTarget < 0.82f)
+            {
+            visualOnlyMicroChips = false;
+                rearWallFillEnabled = true;
+                visualMicroChipCount = Mathf.Clamp(targetVisualChips, 0, 6000);
+                visualOnlyChipCount = visualMicroChipCount;
+                rearWallFillCount = targetRearFill;
+                mediumShardCount = Mathf.Clamp(targetMedium, 12, MaxQualityTotalCount);
+                opticalFillerParticles = Mathf.Clamp(targetFiller, 0, 180);
+                sourceCoverageTarget = Mathf.Max(sourceCoverageTarget, 0.82f);
+                microCrystalDensity = Mathf.Max(microCrystalDensity, 0.72f);
+                densityDistribution = Mathf.Max(densityDistribution, 0.78f);
+                changed = true;
+            }
+
+            if (changed && respawn)
+            {
+                Respawn();
+            }
+        }
+
         public void ResetMosaicDefaults(bool respawn)
         {
             totalCount = DefaultTotalCount;
@@ -489,6 +644,26 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         private void LateUpdate()
         {
             DrawVisualMicroChips();
+        }
+
+        private void SetSpawnedRenderersEnabled(bool enabled)
+        {
+            for (int i = 0; i < spawnedObjects.Count; i++)
+            {
+                if (spawnedObjects[i] == null)
+                {
+                    continue;
+                }
+
+                Renderer[] renderers = spawnedObjects[i].GetComponentsInChildren<Renderer>(true);
+                for (int rendererIndex = 0; rendererIndex < renderers.Length; rendererIndex++)
+                {
+                    if (renderers[rendererIndex] != null)
+                    {
+                        renderers[rendererIndex].enabled = enabled;
+                    }
+                }
+            }
         }
 
         private void OnDestroy()
@@ -546,7 +721,34 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             microCrystalDensity = Mathf.Max(microCrystalDensity, microDensity);
             densityDistribution = Mathf.Max(densityDistribution, Mathf.Lerp(0.68f, 0.9f, microDensity));
             rearWallFillEnabled = rearFill > 0;
-            visualOnlyMicroChips = visualChips > 0;
+            visualOnlyMicroChips = false;
+        }
+
+        private void EnsurePackedRearCassette()
+        {
+            if (packedRearCassette == null)
+            {
+                packedRearCassette = GetComponent<PackedRearCrystalCassette>();
+            }
+
+            if (packedRearCassette == null && rearWallFillEnabled)
+            {
+                packedRearCassette = gameObject.AddComponent<PackedRearCrystalCassette>();
+            }
+
+            packedRearCassette?.Configure(rearWallFillRadius, cylinderLength);
+            if (lightweightCrystalField == null && rearWallFillEnabled)
+            {
+                lightweightCrystalField = GetComponent<LightweightCrystalField>();
+                if (lightweightCrystalField == null)
+                {
+                    lightweightCrystalField = gameObject.AddComponent<LightweightCrystalField>();
+                }
+            }
+
+            lightweightCrystalField?.Configure(rearWallFillRadius, cylinderLength, packedRearCassette);
+            lightweightCrystalField?.Configure(opticalMixingChamber);
+            lightweightCrystalField?.SetVisualLayerName(microParticleLayerName);
         }
 
         private static int ResolveVisualChipLimit(KaleidoscopeQualityLevel level)
@@ -565,6 +767,25 @@ namespace KaleidoscopeEngine.PhysicsSandbox
                     return 5200;
                 default:
                     return 2000;
+            }
+        }
+
+        private static CrystalCassetteQuality MapQuality(KaleidoscopeQualityLevel level)
+        {
+            switch (level)
+            {
+                case KaleidoscopeQualityLevel.Minimal:
+                    return CrystalCassetteQuality.Minimal;
+                case KaleidoscopeQualityLevel.Low:
+                    return CrystalCassetteQuality.Low;
+                case KaleidoscopeQualityLevel.Medium:
+                    return CrystalCassetteQuality.Medium;
+                case KaleidoscopeQualityLevel.Ultra:
+                    return CrystalCassetteQuality.Ultra;
+                case KaleidoscopeQualityLevel.Extreme:
+                    return CrystalCassetteQuality.Extreme;
+                default:
+                    return CrystalCassetteQuality.High;
             }
         }
 
@@ -693,6 +914,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             GameObject instance = definition.prefab != null
                 ? Instantiate(definition.prefab)
                 : GemstonePrimitiveFactory.CreatePrimitive(definition);
+            KaleidoscopeEngine.Performance.KaleidoscopeRebuildGuard.RecordGameObjectInstantiate("GemstoneSpawner.CreateInstance");
 
             instance.name = $"{definition.displayName}_{index:00}";
             return instance;
@@ -711,7 +933,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
             for (int attempt = 0; attempt < placementAttemptsPerObject; attempt++)
             {
-                bool useRearWall = rearWallBias && random.NextDouble() < visibleSourcePlaneBias;
+                bool useRearWall = rearWallFillEnabled || (rearWallBias && random.NextDouble() < visibleSourcePlaneBias);
                 Vector3 local = useRearWall
                     ? RandomPointInRearWallLayer(radius)
                     : spawnInsideCylinder
@@ -729,7 +951,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             }
 
             Vector3 fallback = spawnInsideCylinder
-                ? (rearWallBias ? RandomPointInRearWallLayer(radius) : RandomPointInCylinder(radius))
+                ? (rearWallFillEnabled || rearWallBias ? RandomPointInRearWallLayer(radius) : RandomPointInCylinder(radius))
                 : new Vector3(
                     RandomClusteredAxis(halfSize.x),
                     RandomVerticalAxis(halfSize.y),
@@ -758,6 +980,16 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
         private Vector3 RandomPointInRearWallLayer(float objectRadius)
         {
+            if (opticalMixingChamber != null)
+            {
+                return opticalMixingChamber.RandomLocalPoint(random, objectRadius);
+            }
+
+            if (packedRearCassette != null)
+            {
+                return packedRearCassette.RandomLocalPoint(random, objectRadius);
+            }
+
             float safeRadius = Mathf.Max(0.05f, Mathf.Min(cylinderRadius, rearWallFillRadius) - objectRadius * 1.15f);
             float angle = RandomRange(0f, Mathf.PI * 2f);
             float radial = Mathf.Pow(Mathf.Clamp01((float)random.NextDouble()), 0.58f) * safeRadius;
@@ -857,6 +1089,11 @@ namespace KaleidoscopeEngine.PhysicsSandbox
                 visualMicroChipBatches[i].Clear();
             }
 
+            if (lightweightCrystalField != null && lightweightCrystalField.FieldActive)
+            {
+                return;
+            }
+
             if (!rearWallFillEnabled || !visualOnlyMicroChips || visualMicroChipCount <= 0)
             {
                 return;
@@ -886,6 +1123,11 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
         private Vector3 RandomPointInChipLayer(float objectRadius)
         {
+            if (packedRearCassette != null)
+            {
+                return packedRearCassette.RandomLocalPoint(random, objectRadius);
+            }
+
             float safeRadius = Mathf.Max(0.05f, Mathf.Min(cylinderRadius, rearWallFillRadius) - objectRadius);
             float angle = RandomRange(0f, Mathf.PI * 2f);
             float radialRoll = Mathf.Clamp01((float)random.NextDouble());
@@ -935,7 +1177,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
         private void DrawVisualMicroChips()
         {
-            if (!visualOnlyMicroChips || CountInstancedChips() == 0)
+            if (physicalArtifactRenderingSuppressed || !visualOnlyMicroChips || CountInstancedChips() == 0)
             {
                 return;
             }
@@ -978,6 +1220,44 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             return count;
         }
 
+        private int CountCenterArtifactRenderers()
+        {
+            int count = 0;
+            for (int i = 0; i < spawnedObjects.Count; i++)
+            {
+                GameObject instance = spawnedObjects[i];
+                if (instance == null || IsInsidePackedRearCassette(instance.transform.position))
+                {
+                    continue;
+                }
+
+                Renderer[] renderers = instance.GetComponentsInChildren<Renderer>(true);
+                for (int rendererIndex = 0; rendererIndex < renderers.Length; rendererIndex++)
+                {
+                    Renderer renderer = renderers[rendererIndex];
+                    if (renderer != null && renderer.enabled && renderer.gameObject.activeInHierarchy)
+                    {
+                        count++;
+                    }
+                }
+            }
+
+            return count;
+        }
+
+        private bool IsInsidePackedRearCassette(Vector3 worldPosition)
+        {
+            EnsurePackedRearCassette();
+            Transform volume = spawnVolume != null ? spawnVolume : transform;
+            Vector3 local = volume.InverseTransformPoint(worldPosition);
+            if (opticalMixingChamber != null)
+            {
+                return opticalMixingChamber.ContainsLocalPoint(local, Mathf.Max(visualMicroChipScale, 0.02f));
+            }
+
+            return packedRearCassette != null && packedRearCassette.ContainsLocalPoint(local, Mathf.Max(visualMicroChipScale, 0.02f));
+        }
+
         private void EnsureVisualMicroChipResources()
         {
             if (visualMicroChipMesh == null)
@@ -993,10 +1273,14 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             visualMicroChipMaterials = new Material[visualMicroChipBatches.Length];
             Color[] palette =
             {
-                new Color(0.58f, 0.9f, 1f, 0.58f),
-                new Color(1f, 0.86f, 0.64f, 0.62f),
-                new Color(0.92f, 0.74f, 1f, 0.56f),
-                new Color(0.76f, 1f, 0.78f, 0.54f)
+                packedRearCassette != null ? packedRearCassette.PickColor(random ?? new System.Random(17)) : new Color(0.02f, 0.82f, 0.32f, 0.86f),
+                packedRearCassette != null ? packedRearCassette.PickColor(random ?? new System.Random(23)) : new Color(0.86f, 0.02f, 0.08f, 0.86f),
+                packedRearCassette != null ? packedRearCassette.PickColor(random ?? new System.Random(31)) : new Color(0.04f, 0.22f, 0.95f, 0.86f),
+                packedRearCassette != null ? packedRearCassette.PickColor(random ?? new System.Random(47)) : new Color(1f, 0.48f, 0.04f, 0.82f),
+                packedRearCassette != null ? packedRearCassette.PickColor(random ?? new System.Random(53)) : new Color(0.45f, 0.02f, 0.15f, 0.84f),
+                packedRearCassette != null ? packedRearCassette.PickColor(random ?? new System.Random(59)) : new Color(1f, 0.06f, 0.02f, 0.86f),
+                packedRearCassette != null ? packedRearCassette.PickColor(random ?? new System.Random(61)) : new Color(0.22f, 0.95f, 1f, 0.56f),
+                packedRearCassette != null ? packedRearCassette.PickColor(random ?? new System.Random(67)) : new Color(1f, 1f, 1f, 0.42f)
             };
 
             for (int i = 0; i < visualMicroChipMaterials.Length; i++)

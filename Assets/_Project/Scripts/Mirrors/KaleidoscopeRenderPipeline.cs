@@ -1,5 +1,6 @@
 using KaleidoscopeEngine.FX;
 using KaleidoscopeEngine.PhysicsSandbox;
+
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -36,24 +37,28 @@ namespace KaleidoscopeEngine.Mirrors
         [SerializeField] private GemSparkleController sparkleController;
 
         [Header("Render Texture")]
-        [SerializeField] private int baseResolution = 1024;
+        [SerializeField] private int baseResolution = 3072;
         [SerializeField, Range(0.5f, 2f)] private float resolutionScale = 1f;
         [SerializeField] private bool useHdr = true;
+        [SerializeField, Range(0f, 0.25f)] private float sourceEdgeFeather = 0.08f;
+        [SerializeField, Range(1f, 1.5f)] private float sourceOverscan = 1.12f;
+        [SerializeField, Range(0f, 1f)] private float circularBoundarySuppression = 0.85f;
 
         [Header("Quality")]
         [SerializeField] private KaleidoscopeQualityLevel qualityLevel = KaleidoscopeQualityLevel.High;
-        [SerializeField] private bool renderTextureInspectorDebug = true;
+        [SerializeField] private bool renderTextureInspectorDebug;
 
         [Header("Display")]
         [SerializeField] private KaleidoscopeViewMode viewMode = KaleidoscopeViewMode.Kaleidoscope;
         [SerializeField] private float displayDistance = 1.25f;
         [SerializeField] private string displayLayerName = "KaleidoscopeDisplay";
+        [SerializeField] private bool forceViewerCameraDisplayOnly = true;
 
         [Header("Optical Source")]
         [SerializeField] private KaleidoscopeSourceMode sourceMode = KaleidoscopeSourceMode.ObjectChamber;
         [SerializeField] private bool ribsVisibleToSourceCamera;
         [SerializeField] private float objectChamberFieldOfView = 30f;
-        [SerializeField] private Color objectSourceBackground = new Color(0.015f, 0.018f, 0.022f, 1f);
+        [SerializeField] private Color objectSourceBackground = new Color(0.045f, 0.048f, 0.055f, 1f);
         [SerializeField] private string gemLayerName = "KaleidoscopeGems";
         [SerializeField] private string particleLayerName = "KaleidoscopeParticles";
         [SerializeField] private string opticalFxLayerName = "KaleidoscopeOpticalFX";
@@ -70,15 +75,22 @@ namespace KaleidoscopeEngine.Mirrors
         private bool hasBlockingDiagnostic;
         private float nextValidationTime;
         private string lastLoggedDiagnostic;
+        private KaleidoscopeQualityLevel requestedQualityLevel = KaleidoscopeQualityLevel.High;
+        private bool adaptiveQualityClampActive;
+        private string adaptiveQualityClampReason;
         private KaleidoscopeQualityProfile activeQualityProfile;
         private bool activeQualityProfileInitialized;
         private float nextSourceRenderTime;
+        private float nextCrystalPipelineValidationTime;
+        private Texture externalSourceTexture;
+        private string externalSourceModeName;
+        private int sourceTextureReassignCount;
 
         public bool KaleidoscopeView => viewMode == KaleidoscopeViewMode.Kaleidoscope;
         public bool DisplayView => viewMode == KaleidoscopeViewMode.Kaleidoscope || viewMode == KaleidoscopeViewMode.SourcePreview;
         public KaleidoscopeViewMode CurrentViewMode => viewMode;
         public string ViewMode => viewMode.ToString();
-        public string SourceModeName => sourceMode == KaleidoscopeSourceMode.ObjectChamber ? "Object Chamber" : "Raw Tube";
+        public string SourceModeName => !string.IsNullOrEmpty(externalSourceModeName) ? externalSourceModeName : sourceMode == KaleidoscopeSourceMode.ObjectChamber ? "Object Chamber" : "Raw Tube";
         public string SourceCameraCullingMaskMode => ribsVisibleToSourceCamera ? "Object + Ribs" : "Object Clean";
         public bool RibsVisibleToSourceCamera => ribsVisibleToSourceCamera;
         public string DiagnosticStatus => diagnosticStatus;
@@ -86,15 +98,37 @@ namespace KaleidoscopeEngine.Mirrors
         public int RenderTextureWidth => sourceTexture != null ? sourceTexture.width : 0;
         public int RenderTextureHeight => sourceTexture != null ? sourceTexture.height : 0;
         public string QualityPresetName => ActiveQualityProfile.DisplayName;
+        public string RequestedQualityPresetName => KaleidoscopeQualityProfile.ForLevel(requestedQualityLevel).DisplayName;
+        public string EffectiveQualityPresetName => ActiveQualityProfile.DisplayName;
+        public bool AdaptiveQualityClampActive => adaptiveQualityClampActive;
+        public string QualityClampStatus => adaptiveQualityClampActive
+            ? $"Requested Quality: {RequestedQualityPresetName}, Effective Quality: {EffectiveQualityPresetName} due to {adaptiveQualityClampReason}"
+            : $"Requested Quality: {RequestedQualityPresetName}, Effective Quality: {EffectiveQualityPresetName}";
         public KaleidoscopeQualityLevel QualityLevel => qualityLevel;
+        public KaleidoscopeQualityLevel RequestedQualityLevel => requestedQualityLevel;
+        public float RenderScale => ActiveQualityProfile.SafeTextureScale;
         public float SupersamplingFactor => ActiveQualityProfile.SafeSupersamplingFactor;
+        public int AntiAliasingSamples => ActiveQualityProfile.SafeAntiAliasingSamples;
+        public float TaaQuality => ActiveQualityProfile.taaQuality;
+        public float RenderPixelationFactor => ResolveRenderPixelationFactor(qualityLevel);
+        public float EffectivePixelDensity => RenderTextureWidth > 0 && mainCamera != null
+            ? RenderTextureWidth / Mathf.Max(1f, Screen.width)
+            : ActiveQualityProfile.SafeSupersamplingFactor * ActiveQualityProfile.SafeTextureScale;
         public int SourceUpdateRateLimit => ActiveQualityProfile.updateRateLimit;
+        public int EffectiveSourceUpdateRateLimit => externalSourceTexture != null ? 0 : ActiveQualityProfile.updateRateLimit;
+        public bool DirectTexturePipeline => externalSourceTexture != null;
+        public bool PhysicalPipeline => externalSourceTexture == null;
         public bool RenderTextureInspectorDebug => renderTextureInspectorDebug;
         public string RenderTextureFormatName => sourceTexture != null ? sourceTexture.format.ToString() : ResolveRenderTextureFormat(ActiveQualityProfile).ToString();
         public string RenderTextureFilterModeName => sourceTexture != null ? sourceTexture.filterMode.ToString() : ActiveQualityProfile.filterMode.ToString();
         public float EstimatedRenderTextureMemoryMB => EstimateRenderTextureMemoryMB();
+        public float SourceEdgeFeather => sourceEdgeFeather;
+        public float SourceOverscan => sourceOverscan;
+        public float CircularBoundarySuppression => circularBoundarySuppression;
         public KaleidoscopeViewerCameraController ViewerCameraController => viewerCameraController;
         public Camera SourceCamera => sourceCamera;
+        public Texture ActiveSourceTexture => externalSourceTexture != null ? externalSourceTexture : sourceTexture;
+        public int SourceTextureReassignCount => sourceTextureReassignCount;
         private int DisplayLayer => LayerMask.NameToLayer(displayLayerName) >= 0 ? LayerMask.NameToLayer(displayLayerName) : FallbackDisplayLayer;
         private KaleidoscopeQualityProfile ActiveQualityProfile
         {
@@ -150,13 +184,19 @@ namespace KaleidoscopeEngine.Mirrors
 
             EnsureRenderTexture();
             SyncSourceCamera();
+            if (!DirectTexturePipeline && Time.unscaledTime >= nextCrystalPipelineValidationTime)
+            {
+                spawner?.ValidateLightweightCrystalPipeline(sourceCamera, mainCamera);
+                nextCrystalPipelineValidationTime = Time.unscaledTime + 0.5f;
+            }
+
             AlignDisplayToViewerCamera();
             ApplyViewMode();
 
             if (Time.unscaledTime >= nextValidationTime)
             {
                 ValidateKaleidoscopePipeline(false);
-                nextValidationTime = Time.unscaledTime + 1f;
+                nextValidationTime = Time.unscaledTime + (DirectTexturePipeline ? 4f : 1f);
             }
         }
 
@@ -214,7 +254,75 @@ namespace KaleidoscopeEngine.Mirrors
 
         public void ReturnToKaleidoscopeView()
         {
-            SetViewMode(KaleidoscopeViewMode.Kaleidoscope);
+            RepairEyepieceView();
+        }
+
+        public void RepairEyepieceView()
+        {
+            BuildPipelineObjects();
+            viewMode = KaleidoscopeViewMode.Kaleidoscope;
+
+            if (mainCamera == null)
+            {
+                mainCamera = Camera.main;
+            }
+
+            if (mainCamera != null && originalMainCullingMask < 0)
+            {
+                originalMainCullingMask = mainCamera.cullingMask;
+                originalClearFlags = mainCamera.clearFlags;
+                originalBackgroundColor = mainCamera.backgroundColor;
+            }
+
+            if (displayRenderer != null)
+            {
+                displayRenderer.gameObject.SetActive(true);
+                displayRenderer.enabled = true;
+                displayRenderer.gameObject.layer = DisplayLayer;
+                displayRenderer.sharedMaterial = displayMaterial;
+            }
+
+            if (displayMaterial != null)
+            {
+                displayMaterial.SetFloat("_PreviewSource", 0f);
+                displayMaterial.SetTexture("_SourceTex", ActiveSourceTexture);
+                ApplyRenderQualityMaterialSettings();
+            }
+
+            if (mirrorController != null)
+            {
+                mirrorController.Configure(displayMaterial);
+                mirrorController.SetSourceTexture(ActiveSourceTexture);
+            }
+
+            if (sourceCamera != null)
+            {
+                sourceCamera.targetTexture = sourceTexture;
+                sourceCamera.enabled = externalSourceTexture == null;
+            }
+
+            if (viewerCameraController != null)
+            {
+                viewerCameraController.Configure(mainCamera, displayRenderer);
+                viewerCameraController.SetViewerModeActive(true);
+                viewerCameraController.AlignDisplayToViewerCamera();
+            }
+            else
+            {
+                AlignDisplayToViewerCamera();
+            }
+
+            if (mainCamera != null)
+            {
+                mainCamera.enabled = true;
+                mainCamera.cullingMask = 1 << DisplayLayer;
+                mainCamera.clearFlags = CameraClearFlags.SolidColor;
+                mainCamera.backgroundColor = Color.black;
+                mainCamera.allowHDR = true;
+                mainCamera.allowMSAA = ActiveQualityProfile.SafeAntiAliasingSamples > 1;
+            }
+
+            ValidateKaleidoscopePipeline(true);
         }
 
         public void ToggleRibsVisibleToSourceCamera()
@@ -225,11 +333,34 @@ namespace KaleidoscopeEngine.Mirrors
 
         public void AdjustQualityLevel(int delta)
         {
-            int next = Mathf.Clamp((int)qualityLevel + delta, 0, (int)KaleidoscopeQualityLevel.Extreme);
-            SetQualityLevel((KaleidoscopeQualityLevel)next, true);
+            int next = Mathf.Clamp((int)requestedQualityLevel + delta, 0, (int)KaleidoscopeQualityLevel.NativeSmoothMax);
+            SetQualityLevel((KaleidoscopeQualityLevel)next, false);
         }
 
         public void SetQualityLevel(KaleidoscopeQualityLevel level, bool respawnEntropy)
+        {
+            requestedQualityLevel = level;
+            adaptiveQualityClampActive = false;
+            adaptiveQualityClampReason = null;
+            ApplyEffectiveQualityLevel(level, respawnEntropy);
+        }
+
+        public void SetQualityLevelFromAdaptive(KaleidoscopeQualityLevel level, string reason)
+        {
+            if (level >= requestedQualityLevel)
+            {
+                adaptiveQualityClampActive = false;
+                adaptiveQualityClampReason = null;
+                ApplyEffectiveQualityLevel(requestedQualityLevel, false);
+                return;
+            }
+
+            adaptiveQualityClampActive = true;
+            adaptiveQualityClampReason = string.IsNullOrWhiteSpace(reason) ? "FPS protection" : reason;
+            ApplyEffectiveQualityLevel(level, false);
+        }
+
+        private void ApplyEffectiveQualityLevel(KaleidoscopeQualityLevel level, bool respawnEntropy)
         {
             if (qualityLevel == level && activeQualityProfileInitialized)
             {
@@ -248,18 +379,99 @@ namespace KaleidoscopeEngine.Mirrors
 
         public void SetMinimumQuality()
         {
-            SetQualityLevel(KaleidoscopeQualityLevel.Minimal, true);
+            SetQualityLevel(KaleidoscopeQualityLevel.Minimal, false);
         }
 
         public void SetMaximumQuality()
         {
-            SetQualityLevel(KaleidoscopeQualityLevel.Extreme, true);
+            SetQualityLevel(KaleidoscopeQualityLevel.NativeSmoothMax, false);
+        }
+
+        public void SetStableHighQuality()
+        {
+            if (qualityLevel < KaleidoscopeQualityLevel.High)
+            {
+                SetQualityLevel(KaleidoscopeQualityLevel.High, false);
+            }
+        }
+
+        public void SetSafeModeQuality()
+        {
+            if (qualityLevel < KaleidoscopeQualityLevel.Medium || qualityLevel > KaleidoscopeQualityLevel.High)
+            {
+                SetQualityLevel(KaleidoscopeQualityLevel.High, false);
+            }
         }
 
         public void SetObjectChamberSourceMode(bool enabled)
         {
             sourceMode = enabled ? KaleidoscopeSourceMode.ObjectChamber : KaleidoscopeSourceMode.RawTube;
             SyncSourceCamera();
+        }
+
+        public void SetExternalSourceTexture(Texture texture, string modeName)
+        {
+            if (externalSourceTexture == texture && externalSourceModeName == modeName)
+            {
+                return;
+            }
+
+            externalSourceTexture = texture;
+            externalSourceModeName = texture != null ? modeName : null;
+            sourceTextureReassignCount++;
+            if (displayMaterial != null)
+            {
+                displayMaterial.SetTexture("_SourceTex", ActiveSourceTexture);
+            }
+
+            if (mirrorController != null)
+            {
+                mirrorController.SetSourceTexture(ActiveSourceTexture);
+            }
+
+            if (viewMode == KaleidoscopeViewMode.Kaleidoscope || viewMode == KaleidoscopeViewMode.SourcePreview)
+            {
+                RepairEyepieceView();
+            }
+        }
+
+        public void ClearExternalSourceTexture()
+        {
+            if (externalSourceTexture == null && externalSourceModeName == null)
+            {
+                return;
+            }
+
+            externalSourceTexture = null;
+            externalSourceModeName = null;
+            sourceTextureReassignCount++;
+            if (displayMaterial != null)
+            {
+                displayMaterial.SetTexture("_SourceTex", ActiveSourceTexture);
+            }
+
+            if (mirrorController != null)
+            {
+                mirrorController.SetSourceTexture(ActiveSourceTexture);
+            }
+        }
+
+        public void ForceRefreshSourceTexture()
+        {
+            nextSourceRenderTime = 0f;
+            if (displayMaterial != null)
+            {
+                displayMaterial.SetTexture("_SourceTex", ActiveSourceTexture);
+            }
+        }
+
+        public void SetSourceBackgroundColor(Color color)
+        {
+            objectSourceBackground = color;
+            if (sourceCamera != null)
+            {
+                sourceCamera.backgroundColor = color;
+            }
         }
 
         public void SetKaleidoscopeView(bool enabled)
@@ -310,7 +522,7 @@ namespace KaleidoscopeEngine.Mirrors
             if (mirrorController != null)
             {
                 mirrorController.Configure(displayMaterial);
-                mirrorController.SetSourceTexture(sourceTexture);
+                mirrorController.SetSourceTexture(ActiveSourceTexture);
             }
         }
 
@@ -344,6 +556,7 @@ namespace KaleidoscopeEngine.Mirrors
             if (sourceTexture != null)
             {
                 sourceTexture.Release();
+                KaleidoscopeEngine.Performance.KaleidoscopeRebuildGuard.RecordRenderTextureRecreate("KaleidoscopeRenderPipeline.EnsureRenderTexture");
                 Destroy(sourceTexture);
             }
 
@@ -369,7 +582,12 @@ namespace KaleidoscopeEngine.Mirrors
 
             if (mirrorController != null)
             {
-                mirrorController.SetSourceTexture(sourceTexture);
+                mirrorController.SetSourceTexture(ActiveSourceTexture);
+            }
+
+            if (displayMaterial != null)
+            {
+                displayMaterial.SetTexture("_SourceTex", ActiveSourceTexture);
             }
         }
 
@@ -385,7 +603,9 @@ namespace KaleidoscopeEngine.Mirrors
             {
                 name = "Runtime Kaleidoscope Display"
             };
-            displayMaterial.SetTexture("_SourceTex", sourceTexture);
+            KaleidoscopeEngine.Performance.KaleidoscopeRebuildGuard.RecordMaterialInstance("KaleidoscopeRenderPipeline.EnsureDisplayMaterial");
+            displayMaterial.SetTexture("_SourceTex", ActiveSourceTexture);
+            ApplyRenderQualityMaterialSettings();
         }
 
         private void EnsureSourceCamera()
@@ -513,6 +733,8 @@ namespace KaleidoscopeEngine.Mirrors
 
             sourceCamera.allowHDR = mainCamera.allowHDR;
             sourceCamera.allowMSAA = ActiveQualityProfile.SafeAntiAliasingSamples > 1;
+            mainCamera.allowHDR = true;
+            mainCamera.allowMSAA = ActiveQualityProfile.SafeAntiAliasingSamples > 1;
             sourceCamera.nearClipPlane = mainCamera.nearClipPlane;
             sourceCamera.farClipPlane = mainCamera.farClipPlane;
             sourceCamera.cullingMask = useObjectChamber
@@ -608,7 +830,8 @@ namespace KaleidoscopeEngine.Mirrors
             if (displayMaterial != null)
             {
                 displayMaterial.SetFloat("_PreviewSource", viewMode == KaleidoscopeViewMode.SourcePreview ? 1f : 0f);
-                displayMaterial.SetTexture("_SourceTex", sourceTexture);
+                ApplyRenderQualityMaterialSettings();
+                displayMaterial.SetTexture("_SourceTex", ActiveSourceTexture);
             }
 
             if (viewerCameraController != null)
@@ -623,7 +846,7 @@ namespace KaleidoscopeEngine.Mirrors
 
             if (displayMode)
             {
-                mainCamera.cullingMask = 1 << DisplayLayer;
+                mainCamera.cullingMask = forceViewerCameraDisplayOnly ? 1 << DisplayLayer : mainCamera.cullingMask | (1 << DisplayLayer);
                 mainCamera.clearFlags = CameraClearFlags.SolidColor;
                 mainCamera.backgroundColor = Color.black;
             }
@@ -651,7 +874,7 @@ namespace KaleidoscopeEngine.Mirrors
                 ok = false;
                 diagnostics.AppendLine("SourceCamera missing: ObjectChamberSourceCamera was not created.");
             }
-            else if (DisplayView && !sourceCamera.enabled && ActiveQualityProfile.updateRateLimit <= 0)
+            else if (DisplayView && externalSourceTexture == null && !sourceCamera.enabled && EffectiveSourceUpdateRateLimit <= 0)
             {
                 ok = false;
                 diagnostics.AppendLine("SourceCamera inactive: display modes need the RenderTexture updated.");
@@ -697,10 +920,10 @@ namespace KaleidoscopeEngine.Mirrors
                     diagnostics.AppendLine("Mirror shader inactive: display material is not using KaleidoscopeMirror.");
                 }
 
-                if (displayMaterial.GetTexture("_SourceTex") != sourceTexture)
+                if (displayMaterial.GetTexture("_SourceTex") != ActiveSourceTexture)
                 {
                     ok = false;
-                    diagnostics.AppendLine("Source texture not bound: display material _SourceTex is not the active RenderTexture.");
+                    diagnostics.AppendLine("Source texture not bound: display material _SourceTex is not the active source texture.");
                 }
             }
 
@@ -716,7 +939,7 @@ namespace KaleidoscopeEngine.Mirrors
                 diagnostics.AppendLine("MainCamera culling mask excludes KaleidoscopeDisplay layer.");
             }
 
-            if (DisplayView && sourceCamera != null && CountPotentialSourceRenderers() == 0)
+            if (DisplayView && externalSourceTexture == null && sourceCamera != null && CountPotentialSourceRenderers() == 0)
             {
                 ok = false;
                 diagnostics.AppendLine("Source camera culling mask sees no renderers. Check gem/particle/optical FX layers.");
@@ -733,7 +956,7 @@ namespace KaleidoscopeEngine.Mirrors
             hasBlockingDiagnostic = true;
             if (logWarnings && diagnosticStatus != lastLoggedDiagnostic)
             {
-                Debug.LogWarning($"Kaleidoscope pipeline diagnostics:\n{diagnosticStatus}", this);
+                UnityEngine.Debug.LogWarning($"Kaleidoscope pipeline diagnostics:\n{diagnosticStatus}", this);
                 lastLoggedDiagnostic = diagnosticStatus;
             }
 
@@ -771,7 +994,12 @@ namespace KaleidoscopeEngine.Mirrors
                 return false;
             }
 
-            int updateRateLimit = ActiveQualityProfile.updateRateLimit;
+            if (externalSourceTexture != null)
+            {
+                return false;
+            }
+
+            int updateRateLimit = EffectiveSourceUpdateRateLimit;
             if (updateRateLimit <= 0)
             {
                 return true;
@@ -796,6 +1024,7 @@ namespace KaleidoscopeEngine.Mirrors
 
             activeQualityProfile = KaleidoscopeQualityProfile.ForLevel(qualityLevel);
             activeQualityProfileInitialized = true;
+            requestedQualityLevel = qualityLevel;
             baseResolution = activeQualityProfile.renderTextureResolution;
             resolutionScale = activeQualityProfile.SafeTextureScale;
             useHdr = activeQualityProfile.hdrEnabled;
@@ -807,9 +1036,17 @@ namespace KaleidoscopeEngine.Mirrors
             baseResolution = profile.renderTextureResolution;
             resolutionScale = profile.SafeTextureScale;
             useHdr = profile.hdrEnabled;
-            mirrorController?.ApplyQualityProfile(profile);
-            spawner?.ApplyQualityProfile(profile, respawnEntropy && Application.isPlaying);
-            sparkleController?.ApplyQualityProfile(profile);
+            ApplyRenderQualityMaterialSettings();
+        }
+
+        private void ApplyRenderQualityMaterialSettings()
+        {
+            if (displayMaterial == null)
+            {
+                return;
+            }
+
+            displayMaterial.SetFloat("_RenderPixelationFactor", ResolveRenderPixelationFactor(qualityLevel));
         }
 
         private void ApplyRenderTextureSamplerSettings(KaleidoscopeQualityProfile profile)
@@ -839,6 +1076,21 @@ namespace KaleidoscopeEngine.Mirrors
             }
 
             return RenderTextureFormat.Default;
+        }
+
+        private static float ResolveRenderPixelationFactor(KaleidoscopeQualityLevel level)
+        {
+            switch (level)
+            {
+                case KaleidoscopeQualityLevel.Minimal:
+                    return 6f;
+                case KaleidoscopeQualityLevel.Low:
+                    return 3f;
+                case KaleidoscopeQualityLevel.Medium:
+                    return 1.75f;
+                default:
+                    return 1f;
+            }
         }
 
         private float EstimateRenderTextureMemoryMB()

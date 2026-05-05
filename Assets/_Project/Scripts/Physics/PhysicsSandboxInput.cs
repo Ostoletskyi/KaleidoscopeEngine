@@ -34,6 +34,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         [SerializeField] private float sparkleIntensityChangePerSecond = 1.2f;
 
         private readonly HashSet<char> heldCharacters = new HashSet<char>();
+        private float nextHeldFeedbackTime;
 
         public void Configure(KaleidoscopePhysicsChamber physicsChamber, GemstoneSpawner gemstoneSpawner)
         {
@@ -99,14 +100,21 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             chamber.Tilt(tilt);
 
             float rotation = 0f;
+            float axialSpeedDelta = 0f;
             if (IsHeld(KeyCode.Q, 'й'))
             {
-                chamber.AdjustAxialRotationSpeed(-axialSpeedChangePerSecond * Time.deltaTime);
+                axialSpeedDelta -= axialSpeedChangePerSecond * Time.deltaTime;
             }
 
             if (IsHeld(KeyCode.E, 'у'))
             {
-                chamber.AdjustAxialRotationSpeed(axialSpeedChangePerSecond * Time.deltaTime);
+                axialSpeedDelta += axialSpeedChangePerSecond * Time.deltaTime;
+            }
+
+            if (!Mathf.Approximately(axialSpeedDelta, 0f))
+            {
+                chamber.AdjustAxialRotationSpeed(axialSpeedDelta);
+                HeldFeedback($"Tube Rotation: {chamber.AxialRotationSpeed:F1} deg/s");
             }
 
             chamber.Rotate(rotation);
@@ -114,67 +122,81 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             if (Input.GetKeyDown(KeyCode.Space))
             {
                 chamber.Shake(shakeStrength);
+                spawner?.ApplyVisualPileShake(shakeStrength);
+                Feedback("Shake");
             }
 
             if (IsPressed(KeyCode.R, 'к'))
             {
                 chamber.ResetPose();
+                Feedback("Tube Reset");
             }
 
             if (IsPressed(KeyCode.T, 'е') && spawner != null)
             {
                 metrics?.ResetEscapes();
                 spawner.Respawn();
+                Feedback("Entropy Respawned");
             }
 
             if (!kaleidoscopeView && IsPressed(KeyCode.X, 'ч'))
             {
                 chamber.ToggleAxialRotation();
+                Feedback(chamber.AxialRotationEnabled ? "Tube Rotation Enabled" : "Tube Rotation Disabled");
             }
 
             if (IsPressed(KeyCode.C, 'с'))
             {
                 cameraController?.ToggleMode();
+                Feedback($"Camera: {(cameraController != null ? cameraController.ModeName : "Toggle")}");
             }
 
             if (IsPressed(KeyCode.L, 'д'))
             {
                 lightingRig?.ToggleMovingLight();
+                Feedback(lightingRig != null && lightingRig.MovingLightEnabled ? "Moving Light Enabled" : "Moving Light Disabled");
             }
 
             if (IsPressed(KeyCode.P, 'з'))
             {
                 lightingRig?.NextPreset();
+                Feedback($"Lighting: {(lightingRig != null ? lightingRig.ActivePresetName : "Next")}");
             }
 
             if (IsPressed(KeyCode.K, 'л'))
             {
                 sparkleController?.ToggleSparkles();
+                Feedback(sparkleController != null && sparkleController.SparkleEnabled ? "Sparkles Enabled" : "Sparkles Disabled");
             }
 
             if (IsPressed(KeyCode.N, 'т'))
             {
                 causticProjector?.ToggleCaustics();
+                Feedback(causticProjector != null && causticProjector.CausticsEnabled ? "Caustics Enabled" : "Caustics Disabled");
             }
 
-            if (IsHeld(KeyCode.LeftBracket, 'х'))
+            if (!kaleidoscopeView && IsHeld(KeyCode.LeftBracket, 'х'))
             {
                 lightingRig?.AdjustMovingLightIntensity(-movingLightIntensityChangePerSecond * Time.deltaTime);
+                HeldFeedback($"Moving Light: {(lightingRig != null ? lightingRig.MovingLightIntensity.ToString("F2") : "n/a")}");
             }
 
-            if (IsHeld(KeyCode.RightBracket, 'ъ'))
+            if (!kaleidoscopeView && IsHeld(KeyCode.RightBracket, 'ъ'))
             {
                 lightingRig?.AdjustMovingLightIntensity(movingLightIntensityChangePerSecond * Time.deltaTime);
+                HeldFeedback($"Moving Light: {(lightingRig != null ? lightingRig.MovingLightIntensity.ToString("F2") : "n/a")}");
             }
 
             if (IsHeld(KeyCode.Comma, 'б'))
             {
                 sparkleController?.AdjustSparkleIntensity(-sparkleIntensityChangePerSecond * Time.deltaTime);
+                HeldFeedback($"Sparkle Intensity: {(sparkleController != null ? sparkleController.SparkleIntensity.ToString("F2") : "n/a")}");
             }
 
             if (IsHeld(KeyCode.Period, 'ю'))
             {
                 sparkleController?.AdjustSparkleIntensity(sparkleIntensityChangePerSecond * Time.deltaTime);
+                HeldFeedback($"Sparkle Intensity: {(sparkleController != null ? sparkleController.SparkleIntensity.ToString("F2") : "n/a")}");
             }
         }
 
@@ -250,6 +272,30 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             }
 
             return Input.GetKeyDown(key) || characterPressed;
+        }
+
+        private void Feedback(string message)
+        {
+            debugPanel?.PostOperatorMessage(message);
+        }
+
+        private void HeldFeedback(string message)
+        {
+            if (Time.unscaledTime < nextHeldFeedbackTime)
+            {
+                return;
+            }
+
+            nextHeldFeedbackTime = Time.unscaledTime + 0.32f;
+            Feedback(message);
+        }
+
+        private void OnApplicationFocus(bool hasFocus)
+        {
+            if (!hasFocus)
+            {
+                heldCharacters.Clear();
+            }
         }
 
         private static char MapRussianCharacter(KeyCode key)

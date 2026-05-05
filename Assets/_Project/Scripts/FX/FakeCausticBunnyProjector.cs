@@ -62,6 +62,12 @@ namespace KaleidoscopeEngine.FX
             ApplyVisibility();
         }
 
+        public void SetPhysicalArtifactRenderingSuppressed(bool suppressed)
+        {
+            causticsEnabled = !suppressed;
+            ApplyVisibility();
+        }
+
         public void SetAdaptiveSpotLimit(int maxSpots)
         {
             requestedSpotCount = RequestedSpotCount;
@@ -73,6 +79,27 @@ namespace KaleidoscopeEngine.FX
         {
             effectiveSpotCount = -1;
             ApplyVisibility();
+        }
+
+        public void ApplyViewerComfort(float updateRate, float maxFlicker, float motionDamping)
+        {
+            causticUpdateRate = Mathf.Clamp(updateRate, 8f, 12f);
+            flickerAmount = Mathf.Min(flickerAmount, maxFlicker);
+            movementSpeed = Mathf.Min(movementSpeed, 0.18f);
+            opticalInertia = Mathf.Clamp01(Mathf.Max(opticalInertia, motionDamping));
+            lowFrequencyShimmer = Mathf.Clamp01(Mathf.Max(lowFrequencyShimmer, 0.68f));
+            intensity = Mathf.Min(intensity, 0.48f);
+        }
+
+        public void ApplyEmergencyStability()
+        {
+            causticUpdateRate = Mathf.Min(causticUpdateRate, 8f);
+            flickerAmount = Mathf.Min(flickerAmount, 0.04f);
+            movementSpeed = Mathf.Min(movementSpeed, 0.12f);
+            opticalInertia = Mathf.Max(opticalInertia, 0.92f);
+            lowFrequencyShimmer = Mathf.Max(lowFrequencyShimmer, 0.85f);
+            intensity = Mathf.Min(intensity, 0.32f);
+            SetAdaptiveSpotLimit(Mathf.Min(EffectiveSpotCount, 10));
         }
 
         public void SetOpticalFxLayerName(string layerName)

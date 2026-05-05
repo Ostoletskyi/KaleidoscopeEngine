@@ -22,6 +22,7 @@ namespace KaleidoscopeEngine.Performance
         [Header("Mode")]
         [SerializeField] private bool adaptiveQualityEnabled = true;
         [SerializeField] private bool autoBalanceEnabled = true;
+        [SerializeField] private bool adaptiveQualityCanThrottleUpdates;
 
         private float budget01 = 1f;
         private float nextDegradeTime;
@@ -29,9 +30,12 @@ namespace KaleidoscopeEngine.Performance
         private float nextEmergencyTime;
         private float nextFeedbackTime;
         private bool emergencyMode;
+        private bool temporarilyDisabled;
 
         public bool AdaptiveQualityEnabled => adaptiveQualityEnabled;
+        public bool TemporarilyDisabled => temporarilyDisabled;
         public bool AutoBalanceEnabled => autoBalanceEnabled;
+        public bool AdaptiveQualityCanThrottleUpdates => adaptiveQualityCanThrottleUpdates;
         public bool EmergencyMode => emergencyMode;
         public float Budget01 => budget01;
         public string PerformanceState => fpsMonitor != null ? fpsMonitor.PerformanceState.ToString() : "n/a";
@@ -72,6 +76,7 @@ namespace KaleidoscopeEngine.Performance
         public void ToggleAdaptiveQuality()
         {
             adaptiveQualityEnabled = !adaptiveQualityEnabled;
+            temporarilyDisabled = false;
             if (!adaptiveQualityEnabled)
             {
                 emergencyMode = false;
@@ -80,6 +85,17 @@ namespace KaleidoscopeEngine.Performance
             }
 
             Feedback(adaptiveQualityEnabled ? "Adaptive Quality Enabled" : "Adaptive Quality Disabled");
+        }
+
+        public void DisableTemporarily()
+        {
+            temporarilyDisabled = true;
+            adaptiveQualityEnabled = false;
+            autoBalanceEnabled = false;
+            emergencyMode = false;
+            budget01 = 1f;
+            ClearAdaptiveLimits();
+            Feedback("Adaptive Quality Temporarily Disabled");
         }
 
         public void ToggleAutoBalance()
@@ -125,6 +141,11 @@ namespace KaleidoscopeEngine.Performance
                 return;
             }
 
+            if (renderPipeline != null && renderPipeline.DirectTexturePipeline)
+            {
+                return;
+            }
+
             KaleidoscopePerformanceState state = fpsMonitor.PerformanceState;
             float now = Time.unscaledTime;
 
@@ -141,9 +162,13 @@ namespace KaleidoscopeEngine.Performance
                 {
                     float step = state == KaleidoscopePerformanceState.Critical ? 0.24f : 0.12f;
                     budget01 = Mathf.Clamp01(budget01 - step * budgetProfile.adaptationSpeed);
-                    if (state == KaleidoscopePerformanceState.Critical)
+                    if (state == KaleidoscopePerformanceState.Critical && adaptiveQualityCanThrottleUpdates)
                     {
-                        renderPipeline?.AdjustQualityLevel(-1);
+                        if (renderPipeline != null)
+                        {
+                            KaleidoscopeQualityLevel next = (KaleidoscopeQualityLevel)Mathf.Max(0, (int)renderPipeline.QualityLevel - 1);
+                            renderPipeline.SetQualityLevelFromAdaptive(next, "FPS protection");
+                        }
                     }
 
                     ApplyBudget();
@@ -162,9 +187,12 @@ namespace KaleidoscopeEngine.Performance
             {
                 emergencyMode = false;
                 budget01 = Mathf.Clamp01(budget01 + 0.08f * budgetProfile.adaptationSpeed);
-                if (budget01 > 0.82f)
+                if (budget01 > 0.82f && adaptiveQualityCanThrottleUpdates)
                 {
-                    renderPipeline?.AdjustQualityLevel(1);
+                    if (renderPipeline != null)
+                    {
+                        renderPipeline.SetQualityLevelFromAdaptive(renderPipeline.RequestedQualityLevel, "FPS recovered");
+                    }
                 }
 
                 ApplyBudget();
@@ -177,9 +205,9 @@ namespace KaleidoscopeEngine.Performance
         {
             emergencyMode = true;
             budget01 = 0f;
-            if (renderPipeline != null && renderPipeline.QualityLevel > budgetProfile.emergencyQuality)
+            if (adaptiveQualityCanThrottleUpdates && renderPipeline != null && renderPipeline.QualityLevel > budgetProfile.emergencyQuality)
             {
-                renderPipeline.SetQualityLevel(budgetProfile.emergencyQuality, false);
+                renderPipeline.SetQualityLevelFromAdaptive(budgetProfile.emergencyQuality, "FPS protection");
             }
 
             ApplyBudget();

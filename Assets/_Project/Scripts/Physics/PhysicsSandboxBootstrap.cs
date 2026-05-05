@@ -1,10 +1,14 @@
 using System.Collections.Generic;
+using KaleidoscopeEngine.Audio;
 using KaleidoscopeEngine.FX;
 using KaleidoscopeEngine.Geometry;
+using KaleidoscopeEngine.Comfort;
 using KaleidoscopeEngine.Lighting;
 using KaleidoscopeEngine.Materials;
 using KaleidoscopeEngine.Mirrors;
 using KaleidoscopeEngine.Performance;
+using KaleidoscopeEngine.Scenario;
+using KaleidoscopeEngine.Source;
 using KaleidoscopeEngine.UI;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -118,7 +122,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             spawner.SetMaterialAssigner(materialAssigner);
             spawner.SetGeometryAssigner(geometryAssigner);
             spawner.SetLayerNames(GemsLayerName, ParticlesLayerName);
-            spawner.totalCount = 156;
+            spawner.totalCount = 80;
             spawner.microParticleRatio = 0.58f;
             spawner.SpawnVolumeSize = new Vector3(TubeLength - TubeCapThickness * 3f, TubeRadius * 1.55f, TubeRadius * 1.55f);
             spawner.SetCylindricalSpawnVolume(TubeRadius * 0.82f, TubeLength - TubeCapThickness * 3f);
@@ -126,6 +130,10 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
             EntropyCompressionVolume entropyCompression = root.AddComponent<EntropyCompressionVolume>();
             entropyCompression.Configure(chamber.transform, spawner, TubeRadius, TubeLength, PhysicsOnlyLayerName);
+
+            OpticalMixingChamber opticalMixingChamber = root.AddComponent<OpticalMixingChamber>();
+            opticalMixingChamber.Configure(chamber.transform, TubeRadius, TubeLength, PhysicsOnlyLayerName, ChamberVisualLayerName);
+            spawner.SetOpticalMixingChamber(opticalMixingChamber);
 
             PhysicsSandboxChamberDebugView debugView = root.AddComponent<PhysicsSandboxChamberDebugView>();
             debugView.Configure(chamber.transform);
@@ -142,7 +150,22 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             KaleidoscopeRenderPipeline mirrorPipeline = ConfigureMirrorPipeline(root.transform, mirrorController, opticalSourceChamber);
             mirrorPipeline.ConfigureQualityTargets(spawner, sparkleController);
             spawner.SetSourceVisibilityCamera(mirrorPipeline.SourceCamera);
+            spawner.EnsureViewerDensityFloor(false);
             sparkleController.ApplyVisibleSparkleTarget(spawner.VisibleSparkleTarget);
+
+            GameObject sourceModeObject = new GameObject("Kaleidoscope Source Modes");
+            sourceModeObject.transform.SetParent(root.transform, false);
+            KaleidoscopeSourceModeController sourceModeController = sourceModeObject.AddComponent<KaleidoscopeSourceModeController>();
+            KaleidoscopeSourceModeManager sourceModeManager = sourceModeObject.AddComponent<KaleidoscopeSourceModeManager>();
+            sourceModeManager.Configure(mirrorPipeline, mirrorController, physicsChamber, spawner, null, chamber.transform, opticalSourceChamber, sparkleController, causticProjector);
+            sourceModeController.Configure(mirrorPipeline);
+            KaleidoscopeSourceLibrary sourceLibrary = sourceModeObject.AddComponent<KaleidoscopeSourceLibrary>();
+            sourceLibrary.Configure(sourceModeController, mirrorPipeline, null);
+
+            GameObject comfortObject = new GameObject("Viewer Comfort Controller");
+            comfortObject.transform.SetParent(root.transform, false);
+            ViewerComfortController comfortController = comfortObject.AddComponent<ViewerComfortController>();
+            comfortController.Configure(mirrorController, mirrorPipeline, physicsChamber, sparkleController, causticProjector, sourceModeController);
 
             PhysicsSandboxInput input = root.AddComponent<PhysicsSandboxInput>();
             input.Configure(physicsChamber, spawner);
@@ -152,6 +175,9 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             debugPanel.Configure(physicsChamber, spawner);
             debugPanel.ConfigureDebugSystems(cameraController, debugView, metrics, materialAssigner, lightingRig, geometryAssigner, sparkleController, causticProjector, mirrorPipeline, mirrorController, opticalSourceChamber, entropyCompression);
             debugPanel.ConfigureTubeSettings(tubeSettings);
+            debugPanel.ConfigureViewerSystems(sourceModeController, comfortController);
+            sourceLibrary.ConfigureStatusPanel(debugPanel);
+            sourceModeManager.Configure(mirrorPipeline, mirrorController, physicsChamber, spawner, debugPanel, chamber.transform, opticalSourceChamber, sparkleController, causticProjector);
 
             input.ConfigureDebugSystems(cameraController, debugView, metrics, materialAssigner, lightingRig, geometryAssigner, sparkleController, causticProjector, mirrorPipeline, mirrorController, debugPanel, opticalSourceChamber);
 
@@ -159,11 +185,29 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             operatorConsoleObject.transform.SetParent(root.transform, false);
             KaleidoscopeHelpOverlay helpOverlay = operatorConsoleObject.AddComponent<KaleidoscopeHelpOverlay>();
             helpOverlay.Configure(mirrorPipeline, mirrorController, spawner);
+            helpOverlay.ConfigureStatusPanel(debugPanel);
+            KaleidoscopeGuideOverlay guideOverlay = operatorConsoleObject.AddComponent<KaleidoscopeGuideOverlay>();
+            guideOverlay.Configure(mirrorPipeline, mirrorController, spawner);
+            KaleidoscopeOperatorModeController operatorModeController = operatorConsoleObject.AddComponent<KaleidoscopeOperatorModeController>();
+            operatorModeController.Configure(debugPanel, helpOverlay, guideOverlay, mirrorPipeline);
+            KaleidoscopeInputBindingRegistry inputBindingRegistry = operatorConsoleObject.AddComponent<KaleidoscopeInputBindingRegistry>();
+            inputBindingRegistry.InitializeDefaults();
+
+            GameObject stabilizerObject = new GameObject("Kaleidoscope Temporal Stabilizer");
+            stabilizerObject.transform.SetParent(root.transform, false);
+            KaleidoscopeTemporalStabilizer temporalStabilizer = stabilizerObject.AddComponent<KaleidoscopeTemporalStabilizer>();
+            temporalStabilizer.Configure(comfortController, mirrorController, mirrorPipeline, opticalSourceChamber, physicsChamber, spawner, sparkleController, causticProjector, helpOverlay);
+            debugPanel.ConfigureViewerSystems(sourceModeController, comfortController, temporalStabilizer);
+
             GameObject performanceObject = new GameObject("Kaleidoscope Performance Governor");
             performanceObject.transform.SetParent(root.transform, false);
+            performanceObject.AddComponent<KaleidoscopeRebuildGuard>();
             KaleidoscopeFpsMonitor fpsMonitor = performanceObject.AddComponent<KaleidoscopeFpsMonitor>();
+            KaleidoscopeFramePacingController framePacing = performanceObject.AddComponent<KaleidoscopeFramePacingController>();
             AdaptiveQualityController adaptiveQuality = performanceObject.AddComponent<AdaptiveQualityController>();
             adaptiveQuality.Configure(fpsMonitor, mirrorPipeline, spawner, sparkleController, causticProjector, physicsChamber, helpOverlay);
+            KaleidoscopePerformanceAnalyzer performanceAnalyzer = performanceObject.AddComponent<KaleidoscopePerformanceAnalyzer>();
+            performanceAnalyzer.Configure(fpsMonitor, mirrorPipeline, mirrorController, physicsChamber, spawner, sparkleController, causticProjector, sourceModeController, sourceLibrary, comfortController, temporalStabilizer, adaptiveQuality);
             debugPanel.ConfigurePerformanceSystems(fpsMonitor, adaptiveQuality);
             KaleidoscopeInputRouter inputRouter = operatorConsoleObject.AddComponent<KaleidoscopeInputRouter>();
             inputRouter.Configure(
@@ -176,7 +220,49 @@ namespace KaleidoscopeEngine.PhysicsSandbox
                 debugPanel,
                 helpOverlay,
                 opticalSourceChamber,
-                adaptiveQuality);
+                adaptiveQuality,
+                sourceModeController,
+                comfortController,
+                temporalStabilizer,
+                sourceLibrary,
+                guideOverlay,
+                operatorModeController,
+                performanceAnalyzer,
+                inputBindingRegistry);
+
+            KaleidoscopeBeautyModeController beautyMode = operatorConsoleObject.AddComponent<KaleidoscopeBeautyModeController>();
+            beautyMode.Configure(mirrorController, mirrorPipeline, sourceModeController, framePacing);
+
+            GameObject scenarioObject = new GameObject("Kaleidoscope Scenario Orchestrator");
+            scenarioObject.transform.SetParent(root.transform, false);
+            KaleidoscopeScenarioOrchestrator scenarioOrchestrator = scenarioObject.AddComponent<KaleidoscopeScenarioOrchestrator>();
+            scenarioOrchestrator.Configure(mirrorController, sourceModeController, sourceLibrary, beautyMode, comfortController, debugPanel);
+            inputRouter.ConfigureScenarioOrchestrator(scenarioOrchestrator);
+            debugPanel.ConfigureScenarioOrchestrator(scenarioOrchestrator);
+
+            GameObject runtimeConfigObject = new GameObject("Kaleidoscope Runtime Config");
+            runtimeConfigObject.transform.SetParent(root.transform, false);
+            KaleidoscopeRuntimeConfig runtimeConfig = runtimeConfigObject.AddComponent<KaleidoscopeRuntimeConfig>();
+
+            KaleidoscopeLauncherUI launcher = operatorConsoleObject.AddComponent<KaleidoscopeLauncherUI>();
+            launcher.Configure(
+                runtimeConfig,
+                mirrorPipeline,
+                sourceModeController,
+                sourceModeManager,
+                sourceLibrary,
+                helpOverlay,
+                inputRouter,
+                debugPanel);
+            inputRouter.ConfigureLauncher(launcher);
+
+            GameObject audioReactiveObject = new GameObject("Audio Reactive Director");
+            audioReactiveObject.transform.SetParent(root.transform, false);
+            AudioAnalyzer audioAnalyzer = audioReactiveObject.AddComponent<AudioAnalyzer>();
+            AudioReactiveDirector audioDirector = audioReactiveObject.AddComponent<AudioReactiveDirector>();
+            audioDirector.Configure(audioAnalyzer, mirrorController, sourceModeController, scenarioOrchestrator, debugPanel, launcher);
+            launcher.ConfigureAudioReactiveDirector(audioDirector);
+            inputRouter.ConfigureAudioReactiveDirector(audioDirector);
         }
 
         private static void BuildTubeChamber(Transform chamber)

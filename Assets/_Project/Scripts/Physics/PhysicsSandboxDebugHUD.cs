@@ -23,7 +23,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         [SerializeField] private KaleidoscopeRenderPipeline mirrorPipeline;
         [SerializeField] private KaleidoscopeMirrorController mirrorController;
         [SerializeField] private KaleidoscopeTubeChamberSettings tubeSettings;
-        [SerializeField] private bool visible = true;
+        [SerializeField] private bool visible;
 
         public void Configure(KaleidoscopePhysicsChamber physicsChamber, GemstoneSpawner gemstoneSpawner)
         {

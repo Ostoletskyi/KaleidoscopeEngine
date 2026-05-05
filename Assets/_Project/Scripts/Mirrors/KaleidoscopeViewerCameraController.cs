@@ -9,6 +9,13 @@ namespace KaleidoscopeEngine.Mirrors
         SafePreview
     }
 
+    public enum KaleidoscopeDisplayFillMode
+    {
+        Fit,
+        Fill,
+        Overscan
+    }
+
     /// <summary>
     /// ViewerCamera role: this is the user's eye/eyepiece camera.
     /// It presents the final KaleidoscopeDisplay quad as the primary screen,
@@ -22,6 +29,10 @@ namespace KaleidoscopeEngine.Mirrors
         [SerializeField] private float viewerDistance = 0f;
         [SerializeField, Range(20f, 75f)] private float viewerFov = 42f;
         [SerializeField, Range(0.65f, 1f)] private float displayFillAmount = 0.97f;
+        [SerializeField] private KaleidoscopeDisplayFillMode displayFillMode = KaleidoscopeDisplayFillMode.Fill;
+        [SerializeField, Range(1f, 1.25f)] private float displayOverscan = 1.08f;
+        [SerializeField, Range(0.5f, 1.5f)] private float displayScale = 1f;
+        [SerializeField] private bool cropToScreen = true;
         [SerializeField] private KaleidoscopeViewerCompositionMode viewerCompositionMode = KaleidoscopeViewerCompositionMode.Eyepiece;
         [SerializeField, Range(-0.12f, 0.12f)] private float autoCenterBias;
         [SerializeField, Range(0.8f, 1.03f)] private float fillFrameAmount = 0.98f;
@@ -33,11 +44,20 @@ namespace KaleidoscopeEngine.Mirrors
         [SerializeField] private bool autoAlignOnStart = true;
         [SerializeField] private bool safeFraming = true;
 
+        [Header("Safety")]
+        [SerializeField] private float forcedNearClipPlane = 0.01f;
+        [SerializeField] private float minimumFarClipPlane = 10f;
+        [SerializeField] private bool forceDisplayRendererOn = true;
+
         private Renderer displayRenderer;
         private bool viewerModeActive;
 
         public float DisplayPlaneDistance => displayPlaneDistance;
         public float DisplayFillAmount => displayFillAmount;
+        public string DisplayFillModeName => displayFillMode.ToString();
+        public float DisplayOverscan => displayOverscan;
+        public float DisplayScale => displayScale;
+        public bool CropToScreen => cropToScreen;
         public float FillFrameAmount => fillFrameAmount;
         public string ViewerCompositionModeName => viewerCompositionMode.ToString();
         public float FramingRotation => framingRotation;
@@ -77,9 +97,13 @@ namespace KaleidoscopeEngine.Mirrors
 
         public void ResetViewerComposition()
         {
-            viewerCompositionMode = KaleidoscopeViewerCompositionMode.Eyepiece;
+            viewerCompositionMode = KaleidoscopeViewerCompositionMode.FullFrame;
+            displayFillMode = KaleidoscopeDisplayFillMode.Fill;
+            displayOverscan = 1.08f;
+            displayScale = 1f;
+            cropToScreen = true;
             autoCenterBias = 0f;
-            fillFrameAmount = 0.98f;
+            fillFrameAmount = 1f;
             framingRotation = 0f;
             AlignDisplayToViewerCamera();
         }
@@ -99,11 +123,26 @@ namespace KaleidoscopeEngine.Mirrors
                 return;
             }
 
+            float safeDistance = Mathf.Max(0.05f, displayPlaneDistance);
+
             if (viewerModeActive)
             {
+                viewerCamera.enabled = true;
                 viewerCamera.fieldOfView = viewerFov;
                 viewerCamera.clearFlags = CameraClearFlags.SolidColor;
                 viewerCamera.backgroundColor = Color.black;
+
+                // Critical fix: the display quad lives very close to the viewer camera.
+                // If another system raised nearClipPlane above displayPlaneDistance,
+                // the quad is clipped and Game View becomes black.
+                viewerCamera.nearClipPlane = Mathf.Min(viewerCamera.nearClipPlane, Mathf.Min(forcedNearClipPlane, safeDistance * 0.25f));
+                viewerCamera.farClipPlane = Mathf.Max(viewerCamera.farClipPlane, minimumFarClipPlane, safeDistance * 4f);
+            }
+
+            if (forceDisplayRendererOn)
+            {
+                displayRenderer.enabled = true;
+                displayRenderer.gameObject.SetActive(true);
             }
 
             Transform display = displayRenderer.transform;
@@ -112,29 +151,42 @@ namespace KaleidoscopeEngine.Mirrors
                 display.SetParent(viewerCamera.transform, false);
             }
 
-            float safeDistance = Mathf.Max(0.05f, displayPlaneDistance);
+            display.localPosition = new Vector3(0f, 0f, safeDistance);
             display.localRotation = Quaternion.Euler(0f, 0f, framingRotation);
 
-            float requestedFill = Mathf.Max(displayFillAmount, fillFrameAmount);
-            if (viewerCompositionMode == KaleidoscopeViewerCompositionMode.FullFrame)
-            {
-                requestedFill = Mathf.Max(requestedFill, 1f);
-            }
-            else if (viewerCompositionMode == KaleidoscopeViewerCompositionMode.SafePreview)
+            float requestedFill = ResolveDisplayFill();
+            if (viewerCompositionMode == KaleidoscopeViewerCompositionMode.SafePreview)
             {
                 requestedFill = Mathf.Min(requestedFill, 0.92f);
             }
 
-            float fill = safeFraming ? Mathf.Clamp(requestedFill, 0.65f, 1.0f) : requestedFill;
+            float fill = safeFraming && !cropToScreen
+                ? Mathf.Clamp(requestedFill, 0.65f, 1.0f)
+                : Mathf.Max(0.05f, requestedFill);
+
             float height = 2f * Mathf.Tan(viewerCamera.fieldOfView * Mathf.Deg2Rad * 0.5f) * safeDistance * fill;
             float width = height * Mathf.Max(0.1f, viewerCamera.aspect);
             display.localPosition = new Vector3(0f, autoCenterBias * height, safeDistance);
             display.localScale = new Vector3(width, height, 1f);
+        }
 
-            if (!Mathf.Approximately(viewerDistance, 0f) && viewerModeActive)
+        private float ResolveDisplayFill()
+        {
+            float requestedFill = Mathf.Max(displayFillAmount, fillFrameAmount);
+            switch (displayFillMode)
             {
-                viewerCamera.nearClipPlane = Mathf.Min(viewerCamera.nearClipPlane, safeDistance * 0.5f);
+                case KaleidoscopeDisplayFillMode.Fit:
+                    requestedFill = Mathf.Min(requestedFill, 1f);
+                    break;
+                case KaleidoscopeDisplayFillMode.Overscan:
+                    requestedFill = Mathf.Max(1f, requestedFill) * displayOverscan;
+                    break;
+                default:
+                    requestedFill = Mathf.Max(1f, requestedFill) * displayOverscan;
+                    break;
             }
+
+            return Mathf.Max(0.05f, requestedFill * displayScale);
         }
     }
 }

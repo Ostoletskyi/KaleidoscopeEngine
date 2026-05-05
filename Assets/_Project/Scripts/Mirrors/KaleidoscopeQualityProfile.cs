@@ -9,7 +9,8 @@ namespace KaleidoscopeEngine.Mirrors
         Medium,
         High,
         Ultra,
-        Extreme
+        Extreme,
+        NativeSmoothMax
     }
 
     [System.Serializable]
@@ -45,11 +46,37 @@ namespace KaleidoscopeEngine.Mirrors
         public float radialContinuation;
         public float centerRecursionBlend;
         public float innerPatternPropagation;
+        public bool centerAffectedByQuality;
+        public float centerCleanRadius;
+        public float centerCleanFeather;
+        public float centerPatternContinuation;
+        public float centerDetailBoost;
+        public float centerSampleScale;
+        public float centerReconstructionQuality;
+        public KaleidoscopeCenterFillMode centerFillMode;
         public float vignetteQuality;
         public float chromaticAberrationQuality;
         public int updateRateLimit;
 
-        public string DisplayName => level.ToString();
+        public string DisplayName
+        {
+            get
+            {
+                switch (level)
+                {
+                    case KaleidoscopeQualityLevel.Minimal:
+                        return "Ultra Low";
+                    case KaleidoscopeQualityLevel.Ultra:
+                        return "Very High";
+                    case KaleidoscopeQualityLevel.Extreme:
+                        return "Ultra";
+                    case KaleidoscopeQualityLevel.NativeSmoothMax:
+                        return "Native Smooth / Max";
+                    default:
+                        return level.ToString();
+                }
+            }
+        }
 
         public int ColorBytesPerPixel
         {
@@ -111,7 +138,7 @@ namespace KaleidoscopeEngine.Mirrors
                         0.12f,
                         0.45f,
                         0f,
-                        30);
+                        0);
 
                 case KaleidoscopeQualityLevel.Low:
                     return Create(
@@ -198,27 +225,27 @@ namespace KaleidoscopeEngine.Mirrors
                         4,
                         1f,
                         1f,
-                        1.25f,
-                        1.08f,
+                        1.4f,
+                        1.18f,
                         0.78f,
                         0.72f,
-                        60,
-                        34f,
-                        0.95f,
-                        0.74f,
+                        72,
+                        36f,
+                        1.04f,
+                        0.8f,
+                        1.32f,
+                        52,
+                        true,
+                        0.86f,
+                        true,
                         1.24f,
-                        38,
-                        true,
-                        0.82f,
-                        true,
-                        1.2f,
+                        0.58f,
+                        0.66f,
+                        0.58f,
                         0.5f,
-                        0.6f,
-                        0.5f,
-                        0.44f,
-                        0.4f,
-                        0.78f,
-                        0.06f,
+                        0.48f,
+                        0.7f,
+                        0.045f,
                         0);
 
                 case KaleidoscopeQualityLevel.Ultra:
@@ -257,7 +284,7 @@ namespace KaleidoscopeEngine.Mirrors
                         0.08f,
                         0);
 
-                default:
+                case KaleidoscopeQualityLevel.Extreme:
                     return Create(
                         KaleidoscopeQualityLevel.Extreme,
                         4096,
@@ -272,6 +299,42 @@ namespace KaleidoscopeEngine.Mirrors
                         1f,
                         1.7f,
                         1.45f,
+                        1f,
+                        1f,
+                        96,
+                        48f,
+                        1.15f,
+                        0.9f,
+                        1.55f,
+                        82,
+                        true,
+                        0.94f,
+                        true,
+                        1.36f,
+                        0.74f,
+                        0.86f,
+                        0.76f,
+                        0.68f,
+                        0.64f,
+                        0.94f,
+                        0.12f,
+                        0);
+
+                default:
+                    return Create(
+                        KaleidoscopeQualityLevel.NativeSmoothMax,
+                        4096,
+                        true,
+                        RenderTextureFormat.ARGBHalf,
+                        FilterMode.Trilinear,
+                        16,
+                        -0.9f,
+                        true,
+                        4,
+                        2f,
+                        1f,
+                        1.75f,
+                        1.5f,
                         1f,
                         1f,
                         96,
@@ -330,7 +393,7 @@ namespace KaleidoscopeEngine.Mirrors
             float chromaticAberrationQuality,
             int updateRateLimit)
         {
-            return new KaleidoscopeQualityProfile
+            KaleidoscopeQualityProfile profile = new KaleidoscopeQualityProfile
             {
                 level = level,
                 renderTextureResolution = renderTextureResolution,
@@ -366,6 +429,80 @@ namespace KaleidoscopeEngine.Mirrors
                 chromaticAberrationQuality = chromaticAberrationQuality,
                 updateRateLimit = updateRateLimit
             };
+
+            ApplyCenterQuality(ref profile);
+            return profile;
+        }
+
+        private static void ApplyCenterQuality(ref KaleidoscopeQualityProfile profile)
+        {
+            profile.centerAffectedByQuality = true;
+            switch (profile.level)
+            {
+                case KaleidoscopeQualityLevel.Minimal:
+                    profile.centerCleanRadius = 0.13f;
+                    profile.centerCleanFeather = 0.085f;
+                    profile.centerPatternContinuation = 0.42f;
+                    profile.centerDetailBoost = 0.08f;
+                    profile.centerSampleScale = 0.86f;
+                    profile.centerReconstructionQuality = 0.28f;
+                    profile.centerFillMode = KaleidoscopeCenterFillMode.Clean;
+                    break;
+                case KaleidoscopeQualityLevel.Low:
+                    profile.centerCleanRadius = 0.115f;
+                    profile.centerCleanFeather = 0.075f;
+                    profile.centerPatternContinuation = 0.56f;
+                    profile.centerDetailBoost = 0.12f;
+                    profile.centerSampleScale = 0.94f;
+                    profile.centerReconstructionQuality = 0.42f;
+                    profile.centerFillMode = KaleidoscopeCenterFillMode.MirrorContinuation;
+                    break;
+                case KaleidoscopeQualityLevel.Medium:
+                    profile.centerCleanRadius = 0.095f;
+                    profile.centerCleanFeather = 0.06f;
+                    profile.centerPatternContinuation = 0.72f;
+                    profile.centerDetailBoost = 0.18f;
+                    profile.centerSampleScale = 1.02f;
+                    profile.centerReconstructionQuality = 0.58f;
+                    profile.centerFillMode = KaleidoscopeCenterFillMode.MirrorContinuation;
+                    break;
+                case KaleidoscopeQualityLevel.High:
+                    profile.centerCleanRadius = 0.078f;
+                    profile.centerCleanFeather = 0.045f;
+                    profile.centerPatternContinuation = 0.86f;
+                    profile.centerDetailBoost = 0.25f;
+                    profile.centerSampleScale = 1.12f;
+                    profile.centerReconstructionQuality = 0.76f;
+                    profile.centerFillMode = KaleidoscopeCenterFillMode.SoftBlend;
+                    break;
+                case KaleidoscopeQualityLevel.Ultra:
+                    profile.centerCleanRadius = 0.062f;
+                    profile.centerCleanFeather = 0.036f;
+                    profile.centerPatternContinuation = 0.94f;
+                    profile.centerDetailBoost = 0.32f;
+                    profile.centerSampleScale = 1.22f;
+                    profile.centerReconstructionQuality = 0.9f;
+                    profile.centerFillMode = KaleidoscopeCenterFillMode.SoftBlend;
+                    break;
+                case KaleidoscopeQualityLevel.Extreme:
+                    profile.centerCleanRadius = 0.048f;
+                    profile.centerCleanFeather = 0.028f;
+                    profile.centerPatternContinuation = 1f;
+                    profile.centerDetailBoost = 0.4f;
+                    profile.centerSampleScale = 1.35f;
+                    profile.centerReconstructionQuality = 1f;
+                    profile.centerFillMode = KaleidoscopeCenterFillMode.SoftBlend;
+                    break;
+                default:
+                    profile.centerCleanRadius = 0.048f;
+                    profile.centerCleanFeather = 0.028f;
+                    profile.centerPatternContinuation = 1f;
+                    profile.centerDetailBoost = 0.4f;
+                    profile.centerSampleScale = 1.35f;
+                    profile.centerReconstructionQuality = 1f;
+                    profile.centerFillMode = KaleidoscopeCenterFillMode.SoftBlend;
+                    break;
+            }
         }
     }
 }

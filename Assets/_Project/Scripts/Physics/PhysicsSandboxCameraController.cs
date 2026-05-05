@@ -1,3 +1,4 @@
+using KaleidoscopeEngine.Mirrors;
 using UnityEngine;
 
 namespace KaleidoscopeEngine.PhysicsSandbox
@@ -47,6 +48,20 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         public float ZoomDistance => cameraDistance;
         public bool IsFrontFacing => cameraMode == PhysicsSandboxCameraMode.Front;
 
+        private bool KaleidoscopeViewerOwnsCamera
+        {
+            get
+            {
+                if (targetCamera == null)
+                {
+                    return false;
+                }
+
+                KaleidoscopeViewerCameraController viewer = targetCamera.GetComponent<KaleidoscopeViewerCameraController>();
+                return viewer != null && viewer.ViewerModeActive;
+            }
+        }
+
         public void Configure(Camera cameraToControl, Transform lookTarget)
         {
             targetCamera = cameraToControl;
@@ -56,13 +71,26 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             panOffset = Vector3.zero;
             currentPosition = targetCamera.transform.position;
             currentRotation = targetCamera.transform.rotation;
-            ApplyCameraPose(true);
+            if (!KaleidoscopeViewerOwnsCamera)
+            {
+                ApplyCameraPose(true);
+            }
         }
 
         private void LateUpdate()
         {
             if (targetCamera == null || target == null)
             {
+                return;
+            }
+
+            // In final kaleidoscope/eyepiece modes the main camera belongs to
+            // KaleidoscopeRenderPipeline + KaleidoscopeViewerCameraController.
+            // The physics sandbox camera is only a debug/raw inspection camera.
+            if (KaleidoscopeViewerOwnsCamera)
+            {
+                currentPosition = targetCamera.transform.position;
+                currentRotation = targetCamera.transform.rotation;
                 return;
             }
 
@@ -126,6 +154,13 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             yawDegrees = staticYawDegrees;
             pitchDegrees = 0f;
             panOffset = Vector3.zero;
+            if (KaleidoscopeViewerOwnsCamera)
+            {
+                currentPosition = targetCamera != null ? targetCamera.transform.position : currentPosition;
+                currentRotation = targetCamera != null ? targetCamera.transform.rotation : currentRotation;
+                return;
+            }
+
             ApplyCameraPose(true);
         }
 
@@ -139,6 +174,11 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
         private void ApplyCameraPose(bool immediate)
         {
+            if (KaleidoscopeViewerOwnsCamera)
+            {
+                return;
+            }
+
             Vector3 targetCenter = followTubeCenter ? target.position : Vector3.zero;
             Vector3 lookAt = targetCenter + Vector3.up * targetHeight + panOffset;
             Quaternion rotation = Quaternion.Euler(pitchDegrees, yawDegrees, 0f);
@@ -146,7 +186,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
             Vector3 desiredPosition = lookAt + offset;
             Quaternion desiredRotation = Quaternion.LookRotation(lookAt - desiredPosition, Vector3.up);
-            float blend = immediate || !Application.isPlaying ? 1f : 1f - Mathf.Exp(-smoothing * Time.deltaTime);
+            float blend = immediate || !UnityEngine.Application.isPlaying ? 1f : 1f - Mathf.Exp(-smoothing * Time.deltaTime);
 
             currentPosition = Vector3.Lerp(currentPosition, desiredPosition, blend);
             currentRotation = Quaternion.Slerp(currentRotation, desiredRotation, blend);

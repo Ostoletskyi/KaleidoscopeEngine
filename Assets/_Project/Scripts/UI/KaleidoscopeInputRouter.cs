@@ -1,9 +1,17 @@
-using System.Collections.Generic;
-using System.IO;
+using KaleidoscopeEngine.Comfort;
+using KaleidoscopeEngine.Audio;
 using KaleidoscopeEngine.Mirrors;
 using KaleidoscopeEngine.Performance;
 using KaleidoscopeEngine.PhysicsSandbox;
+using KaleidoscopeEngine.Scenario;
+using KaleidoscopeEngine.Source;
+using System;
+using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace KaleidoscopeEngine.UI
 {
@@ -55,10 +63,19 @@ namespace KaleidoscopeEngine.UI
         QualityMinimal,
         QualityExtreme,
         ToggleAdaptiveQuality,
+        ColorDepthDown,
+        ColorDepthUp,
         PerformancePresetDown,
         PerformancePresetUp,
         ForceSafeMode,
-        ToggleAutoBalance
+        ToggleScenarioOrchestrator,
+        NextScenario,
+        StopAllRotation,
+        RestoreDefaultRotation,
+        ToggleAutoBalance,
+        CycleSourceMode,
+        ResetSourceMode,
+        RandomizeSourceMode
     }
 
     [DisallowMultipleComponent]
@@ -91,11 +108,23 @@ namespace KaleidoscopeEngine.UI
         [SerializeField] private KaleidoscopeHelpOverlay helpOverlay;
         [SerializeField] private OpticalSourceChamber opticalSourceChamber;
         [SerializeField] private AdaptiveQualityController adaptiveQualityController;
+        [SerializeField] private KaleidoscopeSourceModeController sourceModeController;
+        [SerializeField] private KaleidoscopeSourceLibrary sourceLibrary;
+        [SerializeField] private KaleidoscopeGuideOverlay guideOverlay;
+        [SerializeField] private KaleidoscopeOperatorModeController operatorModeController;
+        [SerializeField] private KaleidoscopePerformanceAnalyzer performanceAnalyzer;
+        [SerializeField] private KaleidoscopeInputBindingRegistry inputBindingRegistry;
+        [SerializeField] private ViewerComfortController comfortController;
+        [SerializeField] private KaleidoscopeTemporalStabilizer temporalStabilizer;
+        [SerializeField] private KaleidoscopeScenarioOrchestrator scenarioOrchestrator;
+        [SerializeField] private KaleidoscopeLauncherUI launcherUI;
+        [SerializeField] private AudioReactiveDirector audioReactiveDirector;
 
         [Header("Response")]
-        [SerializeField] private int densityCountStep = 12;
-        [SerializeField] private float sourceRotationDegreesPerSecond = 36f;
+        [SerializeField] private float patternSpeedStep = 8f;
+        [SerializeField] private float tubeSpeedStep = 4f;
         [SerializeField] private float sourceFramingUnitsPerSecond = 0.35f;
+        [SerializeField] private bool debugInputLogging;
 
         private readonly List<Binding> bindings = new List<Binding>();
         private float nextHeldFeedbackTime;
@@ -110,7 +139,15 @@ namespace KaleidoscopeEngine.UI
             KaleidoscopeDebugPanel panel,
             KaleidoscopeHelpOverlay overlay,
             OpticalSourceChamber sourceChamber,
-            AdaptiveQualityController adaptiveController = null)
+            AdaptiveQualityController adaptiveController = null,
+            KaleidoscopeSourceModeController sourceController = null,
+            ViewerComfortController viewerComfort = null,
+            KaleidoscopeTemporalStabilizer stabilizer = null,
+            KaleidoscopeSourceLibrary library = null,
+            KaleidoscopeGuideOverlay guides = null,
+            KaleidoscopeOperatorModeController modeController = null,
+            KaleidoscopePerformanceAnalyzer analyzer = null,
+            KaleidoscopeInputBindingRegistry bindingRegistry = null)
         {
             chamber = physicsChamber;
             spawner = gemstoneSpawner;
@@ -122,7 +159,31 @@ namespace KaleidoscopeEngine.UI
             helpOverlay = overlay;
             opticalSourceChamber = sourceChamber;
             adaptiveQualityController = adaptiveController;
+            sourceModeController = sourceController;
+            sourceLibrary = library;
+            guideOverlay = guides;
+            operatorModeController = modeController;
+            performanceAnalyzer = analyzer;
+            inputBindingRegistry = bindingRegistry;
+            inputBindingRegistry?.InitializeDefaults();
+            comfortController = viewerComfort;
+            temporalStabilizer = stabilizer;
             BuildBindings();
+        }
+
+        public void ConfigureScenarioOrchestrator(KaleidoscopeScenarioOrchestrator orchestrator)
+        {
+            scenarioOrchestrator = orchestrator;
+        }
+
+        public void ConfigureLauncher(KaleidoscopeLauncherUI launcher)
+        {
+            launcherUI = launcher;
+        }
+
+        public void ConfigureAudioReactiveDirector(AudioReactiveDirector director)
+        {
+            audioReactiveDirector = director;
         }
 
         public void ConfigureAdaptiveQuality(AdaptiveQualityController adaptiveController)
@@ -137,10 +198,259 @@ namespace KaleidoscopeEngine.UI
 
         private void Update()
         {
+            if (Input.GetMouseButtonDown(2))
+            {
+                if (launcherUI == null)
+                {
+                    launcherUI = FindObjectOfType<KaleidoscopeLauncherUI>();
+                }
+
+                launcherUI?.Toggle();
+                Feedback(launcherUI != null && launcherUI.MenuVisible ? "Launcher Menu Open" : "Launcher Menu Closed");
+                return;
+            }
+
+            if (HandleControlHotkeys())
+            {
+                return;
+            }
+
             HandleViewModeZone();
             HandleGeometryZone();
             HandleCameraZone();
             HandleDebugZone();
+        }
+
+        private bool HandleControlHotkeys()
+        {
+            bool alt = AltHeld();
+            bool ctrl = ControlHeld();
+            bool shift = ShiftHeld();
+
+            if (shift && Pressed(KeyCode.F1))
+            {
+                operatorModeController?.SetViewerMode();
+                Feedback("Viewer Mode");
+                return true;
+            }
+
+            if (shift && Pressed(KeyCode.F2))
+            {
+                operatorModeController?.SetOperatorMode();
+                RequestOperatorConsole();
+                Feedback("Operator Mode");
+                return true;
+            }
+
+            if (PressedColorDepthPrevious())
+            {
+                mirrorController?.StepColorDepthMode(-1);
+                Feedback($"Color Depth: {(mirrorController != null ? mirrorController.ColorDepthModeName : "Previous")}");
+                return true;
+            }
+
+            if (PressedColorDepthNext())
+            {
+                mirrorController?.StepColorDepthMode(1);
+                Feedback($"Color Depth: {(mirrorController != null ? mirrorController.ColorDepthModeName : "Next")}");
+                return true;
+            }
+
+            // CTRL + digits: visual guide overlays only.
+            // ALT + digits: source category switching only.
+            // This avoids the old conflict where Alt+1..8 were consumed before guide controls.
+            if (ctrl)
+            {
+                if (Pressed(KeyCode.M))
+                {
+                    audioReactiveDirector?.ToggleReactiveMode();
+                    Feedback(audioReactiveDirector != null && audioReactiveDirector.ReactiveEnabled ? "Audio Reactive Enabled" : "Audio Reactive Disabled");
+                    return true;
+                }
+
+                if (Pressed(KeyCode.B))
+                {
+                    audioReactiveDirector?.ToggleBeatDebugOverlay();
+                    Feedback(audioReactiveDirector != null && audioReactiveDirector.BeatDebugOverlay ? "Beat Debug Overlay Enabled" : "Beat Debug Overlay Disabled");
+                    return true;
+                }
+
+                if (Pressed(KeyCode.R))
+                {
+                    audioReactiveDirector?.Resync();
+                    Feedback("Audio Reactive Resync");
+                    return true;
+                }
+
+                if (Pressed(KeyCode.A))
+                {
+                    scenarioOrchestrator?.ToggleAutoMode();
+                    Feedback(scenarioOrchestrator != null && scenarioOrchestrator.OrchestratorEnabled ? $"Auto Scenario: {scenarioOrchestrator.CurrentScenarioName}" : "Auto Scenario Disabled");
+                    return true;
+                }
+
+                if (Pressed(KeyCode.F))
+                {
+                    mirrorController?.ApplyAutoVisualQuality();
+                    Feedback("Auto Visual Quality: Premium Look");
+                    return true;
+                }
+
+                if (Pressed(KeyCode.Alpha1) || Pressed(KeyCode.Keypad1))
+                {
+                    ToggleGuide(KaleidoscopeGuideFlags.MirrorWedgeBoundaries, "Guide: Mirror Wedges");
+                    return true;
+                }
+
+                if (Pressed(KeyCode.Alpha2) || Pressed(KeyCode.Keypad2))
+                {
+                    ToggleGuide(KaleidoscopeGuideFlags.SourceCoverage, "Guide: Source Coverage");
+                    return true;
+                }
+
+                if (Pressed(KeyCode.Alpha3) || Pressed(KeyCode.Keypad3))
+                {
+                    ToggleGuide(KaleidoscopeGuideFlags.SourceToMirrorTransfer, "Guide: Transfer Region");
+                    return true;
+                }
+
+                if (Pressed(KeyCode.Alpha4) || Pressed(KeyCode.Keypad4))
+                {
+                    ToggleGuide(KaleidoscopeGuideFlags.OpticalConvergence, "Guide: Convergence");
+                    return true;
+                }
+
+                if (Pressed(KeyCode.Alpha5) || Pressed(KeyCode.Keypad5))
+                {
+                    ToggleGuide(KaleidoscopeGuideFlags.CenterComposition, "Guide: Center Composition");
+                    return true;
+                }
+
+                if (Pressed(KeyCode.Alpha6) || Pressed(KeyCode.Keypad6))
+                {
+                    ToggleGuide(KaleidoscopeGuideFlags.SafeViewingZones, "Guide: Safe Zones");
+                    return true;
+                }
+
+                if (Pressed(KeyCode.Alpha7) || Pressed(KeyCode.Keypad7))
+                {
+                    ToggleGuide(KaleidoscopeGuideFlags.SourceDensityHeatmap, "Guide: Density Heatmap");
+                    return true;
+                }
+
+                if (Pressed(KeyCode.Alpha8) || Pressed(KeyCode.Keypad8))
+                {
+                    ToggleGuide(KaleidoscopeGuideFlags.RenderTexturePreview, "Guide: RT Preview");
+                    return true;
+                }
+
+                if (Pressed(KeyCode.Alpha9) || Pressed(KeyCode.Keypad9))
+                {
+                    ToggleGuide(KaleidoscopeGuideFlags.OpticalFlow, "Guide: Optical Flow");
+                    return true;
+                }
+
+                if (Pressed(KeyCode.Alpha0) || Pressed(KeyCode.Keypad0))
+                {
+                    guideOverlay?.HideAllGuides();
+                    Feedback("Guides Hidden");
+                    return true;
+                }
+
+                return false;
+            }
+
+            if (alt)
+            {
+                if (Pressed(KeyCode.Alpha1))
+                {
+                    SelectSourceCategory(KaleidoscopeSourceCategory.TransparentGemstones);
+                    return true;
+                }
+
+                if (Pressed(KeyCode.Alpha2))
+                {
+                    SelectSourceCategory(KaleidoscopeSourceCategory.ColoredGlass);
+                    return true;
+                }
+
+                if (Pressed(KeyCode.Alpha3))
+                {
+                    SelectSourceCategory(KaleidoscopeSourceCategory.UserImages);
+                    return true;
+                }
+
+                if (Pressed(KeyCode.Alpha4))
+                {
+                    SelectSourceCategory(KaleidoscopeSourceCategory.ProceduralColorBlobs);
+                    return true;
+                }
+
+                if (Pressed(KeyCode.Alpha5))
+                {
+                    SelectSourceCategory(KaleidoscopeSourceCategory.PolygonalGeometry);
+                    return true;
+                }
+
+                if (Pressed(KeyCode.Alpha6))
+                {
+                    SelectSourceCategory(KaleidoscopeSourceCategory.Liquids);
+                    return true;
+                }
+
+                if (Pressed(KeyCode.Alpha7))
+                {
+                    sourceModeController?.SetMode(KaleidoscopeSourceModeKind.Hybrid);
+                    Feedback("Source: Hybrid");
+                    return true;
+                }
+
+                if (Pressed(KeyCode.Alpha8))
+                {
+                    SelectSourceCategory(KaleidoscopeSourceCategory.ExperimentalSources);
+                    return true;
+                }
+
+                if (Pressed(KeyCode.LeftArrow))
+                {
+                    sourceLibrary?.PreviousPreset();
+                    Feedback("Previous Source Preset");
+                    return true;
+                }
+
+                if (Pressed(KeyCode.RightArrow))
+                {
+                    sourceLibrary?.NextPreset();
+                    Feedback("Next Source Preset");
+                    return true;
+                }
+
+                if (Pressed(KeyCode.Backspace))
+                {
+                    sourceLibrary?.ResetCurrentSource();
+                    sourceModeController?.ResetCurrentMode();
+                    Feedback("Source Reset");
+                    return true;
+                }
+
+                if (Pressed(KeyCode.R))
+                {
+                    sourceLibrary?.RandomizeCurrentSource();
+                    sourceModeController?.RandomizeCurrentMode();
+                    Feedback("Source Randomized");
+                    return true;
+                }
+
+                if (Pressed(KeyCode.O))
+                {
+                    OpenUserImageBrowser();
+                    return true;
+                }
+
+                return true;
+            }
+
+            return false;
         }
 
         private void BuildBindings()
@@ -150,22 +460,29 @@ namespace KaleidoscopeEngine.UI
             Add(KaleidoscopeControlZone.ViewModes, KaleidoscopeOperatorAction.ReturnEyepiece, KeyCode.Delete);
             Add(KaleidoscopeControlZone.ViewModes, KaleidoscopeOperatorAction.CenterExposureUp, KeyCode.Home);
             Add(KaleidoscopeControlZone.ViewModes, KaleidoscopeOperatorAction.CenterExposureDown, KeyCode.End);
-            Add(KaleidoscopeControlZone.ViewModes, KaleidoscopeOperatorAction.DensityUp, KeyCode.PageUp);
-            Add(KaleidoscopeControlZone.ViewModes, KaleidoscopeOperatorAction.DensityDown, KeyCode.PageDown);
+            Add(KaleidoscopeControlZone.ViewModes, KaleidoscopeOperatorAction.QualityUp, KeyCode.PageUp);
+            Add(KaleidoscopeControlZone.ViewModes, KaleidoscopeOperatorAction.QualityDown, KeyCode.PageDown);
+
+            // Russian layout quality hotkeys are handled manually by PressedRenderQualityDown/Up().
+            // They are intentionally kept out of this passive binding table to avoid duplicate/false dispatch.
 
             Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.SixSectorMode, KeyCode.Keypad1);
             Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.EightSectorMode, KeyCode.Keypad2);
             Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.TwelveSectorMode, KeyCode.Keypad3);
             Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.MirrorRotateLeft, KeyCode.Keypad4);
             Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.MirrorRotateRight, KeyCode.Keypad6);
+            Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.StopAllRotation, KeyCode.Keypad5);
             Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.ToggleAsymmetry, KeyCode.Keypad7);
             Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.ToggleSeamBlend, KeyCode.Keypad8);
             Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.ToggleOpticalMask, KeyCode.Keypad9);
+            Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.RestoreDefaultRotation, KeyCode.KeypadEnter);
+            Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.CycleSourceMode, KeyCode.KeypadEnter, true);
+            Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.ResetSourceMode, KeyCode.Keypad0);
+            Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.RandomizeSourceMode, KeyCode.KeypadPeriod);
             Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.DriftUp, KeyCode.KeypadPlus);
             Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.DriftDown, KeyCode.KeypadMinus);
             Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.ToggleBreathing, KeyCode.KeypadMultiply);
             Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.ToggleWobble, KeyCode.KeypadDivide);
-            Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.ToggleDiffuser, KeyCode.Keypad0);
 
             Add(KaleidoscopeControlZone.Camera, KaleidoscopeOperatorAction.ViewerRotateLeft, KeyCode.LeftArrow);
             Add(KaleidoscopeControlZone.Camera, KaleidoscopeOperatorAction.ViewerRotateRight, KeyCode.RightArrow);
@@ -186,8 +503,12 @@ namespace KaleidoscopeEngine.UI
             Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.QualityUp, KeyCode.F8);
             Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.QualityMinimal, KeyCode.F7, true);
             Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.QualityExtreme, KeyCode.F8, true);
+            Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.ColorDepthDown, KeyCode.Comma);
+            Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.ColorDepthUp, KeyCode.Period);
             Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.ToggleAdaptiveQuality, KeyCode.F9);
             Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.ToggleAutoBalance, KeyCode.F9, true);
+            Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.ToggleScenarioOrchestrator, KeyCode.F10, true);
+            Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.NextScenario, KeyCode.F11, true);
             Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.PerformancePresetDown, KeyCode.F10);
             Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.PerformancePresetUp, KeyCode.F11);
             Add(KaleidoscopeControlZone.Debug, KaleidoscopeOperatorAction.ForceSafeMode, KeyCode.F12);
@@ -200,7 +521,7 @@ namespace KaleidoscopeEngine.UI
                 Binding existing = bindings[i];
                 if (existing.Key == key && existing.Shift == shift)
                 {
-                    Debug.LogWarning($"Duplicate kaleidoscope binding ignored: {key} for {action}.", this);
+                    UnityEngine.Debug.LogWarning($"Duplicate kaleidoscope binding ignored: {key} for {action}.", this);
                     return;
                 }
             }
@@ -223,8 +544,10 @@ namespace KaleidoscopeEngine.UI
 
             if (Pressed(KeyCode.Delete))
             {
+                // Return to final eyepiece mode. Do not also reset the physics
+                // camera here: that controller targets the same Main Camera and
+                // would immediately pull the viewer back into the tube/debug view.
                 mirrorPipeline?.ReturnToKaleidoscopeView();
-                cameraController?.ResetToFrontView();
                 Feedback("Eyepiece View");
             }
 
@@ -240,18 +563,22 @@ namespace KaleidoscopeEngine.UI
                 HeldFeedback("Center Exposure -");
             }
 
-            if (Pressed(KeyCode.PageUp))
+            if (Pressed(KeyCode.PageUp) || PressedRenderQualityUp())
             {
-                spawner?.AdjustOpticalDensity(densityCountStep);
-                mirrorController?.AdjustOpticalDensity(1f);
-                Feedback("Optical Density +");
+                mirrorPipeline?.AdjustQualityLevel(1);
+                FeedbackRenderQuality("Render Quality +");
             }
 
-            if (Pressed(KeyCode.PageDown))
+            if (Pressed(KeyCode.PageDown) || PressedRenderQualityDown())
             {
-                spawner?.AdjustOpticalDensity(-densityCountStep);
-                mirrorController?.AdjustOpticalDensity(-1f);
-                Feedback("Optical Density -");
+                mirrorPipeline?.AdjustQualityLevel(-1);
+                FeedbackRenderQuality("Render Quality -");
+            }
+
+            if (Pressed(KeyCode.C) && ShiftHeld())
+            {
+                mirrorController?.ToggleCenterMaskPreview();
+                Feedback("Center Mask Preview");
             }
         }
 
@@ -278,13 +605,20 @@ namespace KaleidoscopeEngine.UI
             if (Held(KeyCode.Keypad4))
             {
                 mirrorController?.RotatePattern(-1f);
-                HeldFeedback("Mirror Rotation -");
+                HeldFeedback("Pattern Nudge -");
             }
 
             if (Held(KeyCode.Keypad6))
             {
                 mirrorController?.RotatePattern(1f);
-                HeldFeedback("Mirror Rotation +");
+                HeldFeedback("Pattern Nudge +");
+            }
+
+            if (Pressed(KeyCode.Keypad5))
+            {
+                mirrorController?.StopPatternRotation();
+                chamber?.StopAxialRotation();
+                Feedback("Rotation Stopped");
             }
 
             if (Pressed(KeyCode.Keypad7))
@@ -303,6 +637,34 @@ namespace KaleidoscopeEngine.UI
             {
                 mirrorController?.ToggleOpticalMask();
                 Feedback($"Optical Mask: {(mirrorController != null ? mirrorController.MaskModeName : "Toggle")}");
+            }
+
+            if (Pressed(KeyCode.KeypadEnter))
+            {
+                bool shift = ShiftHeld();
+                if (shift)
+                {
+                    sourceModeController?.CycleMode();
+                    Feedback($"Source: {(sourceModeController != null ? sourceModeController.CurrentModeName : "Cycle")}");
+                }
+                else
+                {
+                    mirrorController?.RestoreDefaultPatternRotation();
+                    chamber?.RestoreDefaultAxialRotation();
+                    Feedback("Default Rotation Restored");
+                }
+            }
+
+            if (Pressed(KeyCode.Keypad0))
+            {
+                opticalSourceChamber?.ToggleDiffuserModule();
+                Feedback(opticalSourceChamber != null && opticalSourceChamber.DiffuserEnabled ? "Diffuser Enabled" : "Diffuser Disabled");
+            }
+
+            if (Pressed(KeyCode.KeypadPeriod))
+            {
+                sourceModeController?.RandomizeCurrentMode();
+                Feedback("Source Randomized");
             }
 
             if (Pressed(KeyCode.KeypadPlus))
@@ -328,29 +690,23 @@ namespace KaleidoscopeEngine.UI
                 mirrorController?.ToggleWobble();
                 Feedback(mirrorController != null && mirrorController.WobbleEnabled ? "Wobble Enabled" : "Wobble Disabled");
             }
-
-            if (Pressed(KeyCode.Keypad0))
-            {
-                opticalSourceChamber?.ToggleDiffuserModule();
-                Feedback(opticalSourceChamber != null && opticalSourceChamber.DiffuserEnabled ? "Diffuser Enabled" : "Diffuser Disabled");
-            }
         }
 
         private void HandleCameraZone()
         {
-            bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            bool shift = ShiftHeld();
             if (shift)
             {
                 if (Held(KeyCode.LeftArrow))
                 {
-                    mirrorPipeline?.AdjustSourceOrbit(-sourceRotationDegreesPerSecond * Time.deltaTime);
-                    HeldFeedback("Source Orbit -");
+                    chamber?.AdjustAxialRotationSpeed(-tubeSpeedStep * Time.deltaTime * 3f);
+                    HeldFeedback($"Tube Rotation: {(chamber != null ? chamber.AxialRotationSpeed.ToString("F1") : "n/a")} deg/s");
                 }
 
                 if (Held(KeyCode.RightArrow))
                 {
-                    mirrorPipeline?.AdjustSourceOrbit(sourceRotationDegreesPerSecond * Time.deltaTime);
-                    HeldFeedback("Source Orbit +");
+                    chamber?.AdjustAxialRotationSpeed(tubeSpeedStep * Time.deltaTime * 3f);
+                    HeldFeedback($"Tube Rotation: {(chamber != null ? chamber.AxialRotationSpeed.ToString("F1") : "n/a")} deg/s");
                 }
 
                 if (Held(KeyCode.UpArrow))
@@ -368,34 +724,46 @@ namespace KaleidoscopeEngine.UI
                 return;
             }
 
+            if (Pressed(KeyCode.Space))
+            {
+                bool usesTube = sourceModeController == null || sourceModeController.ModeManager == null || sourceModeController.ModeManager.SourceModeUsesTube;
+                if (usesTube)
+                {
+                    chamber?.Shake(1f);
+                }
+
+                mirrorController?.ApplyShakeImpulse(usesTube);
+                Feedback("Shake");
+            }
+
             if (Held(KeyCode.LeftArrow))
             {
-                viewerCameraController?.AdjustFramingRotation(-1f);
-                HeldFeedback("Viewer Rotation -");
+                mirrorController?.AdjustPatternSpinSpeed(-patternSpeedStep, IsExperimentalSourceMode());
+                HeldFeedback($"Spin: {(mirrorController != null ? mirrorController.RequestedPatternRotationSpeedDeg.ToString("+0;-0;0") : "n/a")} deg/s");
             }
 
             if (Held(KeyCode.RightArrow))
             {
-                viewerCameraController?.AdjustFramingRotation(1f);
-                HeldFeedback("Viewer Rotation +");
+                mirrorController?.AdjustPatternSpinSpeed(patternSpeedStep, IsExperimentalSourceMode());
+                HeldFeedback($"Spin: {(mirrorController != null ? mirrorController.RequestedPatternRotationSpeedDeg.ToString("+0;-0;0") : "n/a")} deg/s");
             }
 
             if (Held(KeyCode.UpArrow))
             {
-                viewerCameraController?.AdjustViewerZoom(1f);
-                HeldFeedback("Viewer Zoom +");
+                mirrorController?.AdjustZoom(1f);
+                HeldFeedback($"Zoom: {(mirrorController != null ? mirrorController.RequestedPatternZoom.ToString("F2") : "n/a")}x");
             }
 
             if (Held(KeyCode.DownArrow))
             {
-                viewerCameraController?.AdjustViewerZoom(-1f);
-                HeldFeedback("Viewer Zoom -");
+                mirrorController?.AdjustZoom(-1f);
+                HeldFeedback($"Zoom: {(mirrorController != null ? mirrorController.RequestedPatternZoom.ToString("F2") : "n/a")}x");
             }
         }
 
         private void HandleDebugZone()
         {
-            bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            bool shift = ShiftHeld();
 
             if (Pressed(KeyCode.F1))
             {
@@ -404,21 +772,23 @@ namespace KaleidoscopeEngine.UI
 
             if (Pressed(KeyCode.F2))
             {
-                debugPanel?.SetCompactMode();
-                Feedback("Compact Debug");
+                operatorModeController?.SetOperatorMode();
+                RequestOperatorConsole();
+                Feedback("Operator Console");
             }
 
             if (Pressed(KeyCode.F3))
             {
-                debugPanel?.SetFullMode();
-                Feedback("Full Debug");
+                operatorModeController?.SetOperatorMode();
+                RequestOperatorConsole();
+                Feedback("Diagnostics Console");
             }
 
             if (Pressed(KeyCode.F4))
             {
                 debugPanel?.Hide();
                 helpOverlay?.Hide();
-                Feedback("Debug Hidden");
+                guideOverlay?.HideAllGuides();
             }
 
             if (Pressed(KeyCode.F5))
@@ -444,7 +814,7 @@ namespace KaleidoscopeEngine.UI
                 else
                 {
                     mirrorPipeline?.AdjustQualityLevel(-1);
-                    Feedback($"Quality: {(mirrorPipeline != null ? mirrorPipeline.QualityPresetName : "Down")}");
+                    FeedbackRenderQuality("Render Quality -");
                 }
             }
 
@@ -453,12 +823,12 @@ namespace KaleidoscopeEngine.UI
                 if (shift)
                 {
                     mirrorPipeline?.SetMaximumQuality();
-                    Feedback("Quality: Extreme");
+                    FeedbackRenderQuality("Render Quality: Max");
                 }
                 else
                 {
                     mirrorPipeline?.AdjustQualityLevel(1);
-                    Feedback($"Quality: {(mirrorPipeline != null ? mirrorPipeline.QualityPresetName : "Up")}");
+                    FeedbackRenderQuality("Render Quality +");
                 }
             }
 
@@ -478,18 +848,33 @@ namespace KaleidoscopeEngine.UI
 
             if (Pressed(KeyCode.F10))
             {
+                if (shift)
+                {
+                    scenarioOrchestrator?.ToggleEnabled();
+                    Feedback(scenarioOrchestrator != null && scenarioOrchestrator.OrchestratorEnabled ? $"Scenario Enabled: {scenarioOrchestrator.CurrentScenarioName}" : "Scenario Disabled");
+                    return;
+                }
+
                 adaptiveQualityController?.PerformancePresetDown();
                 Feedback("Performance Preset Down");
             }
 
             if (Pressed(KeyCode.F11))
             {
+                if (shift)
+                {
+                    scenarioOrchestrator?.NextScenario();
+                    Feedback($"Scenario: {(scenarioOrchestrator != null ? scenarioOrchestrator.CurrentScenarioName : "Next")}");
+                    return;
+                }
+
                 adaptiveQualityController?.PerformancePresetUp();
                 Feedback("Performance Preset Up");
             }
 
             if (Pressed(KeyCode.F12))
             {
+                temporalStabilizer?.EnterSafeMode("Safe Mode");
                 adaptiveQualityController?.ForceSafeMode();
                 Feedback("Emergency Safe Mode");
             }
@@ -500,14 +885,226 @@ namespace KaleidoscopeEngine.UI
             return Input.GetKeyDown(key);
         }
 
+        private bool PressedRenderQualityDown()
+        {
+            // Russian 'Х' normally appears as inputString on Russian layout.
+            // '[' is the physical key fallback for the same area on many layouts.
+            bool pressed = Input.GetKeyDown(KeyCode.X) ||
+                           Input.GetKeyDown(KeyCode.LeftBracket) ||
+                           InputStringContains('х', 'Х', 'x', 'X', '[');
+
+            if (pressed)
+            {
+                LogInputDebug($"Render quality DOWN detected. inputString='{Input.inputString}'");
+            }
+
+            return pressed;
+        }
+
+        private bool PressedRenderQualityUp()
+        {
+            // Russian 'Ъ' normally maps to the physical ']' key area.
+            bool pressed = Input.GetKeyDown(KeyCode.RightBracket) ||
+                           InputStringContains('ъ', 'Ъ', ']', '}');
+
+            if (pressed)
+            {
+                LogInputDebug($"Render quality UP detected. inputString='{Input.inputString}'");
+            }
+
+            return pressed;
+        }
+
+        private bool PressedColorDepthPrevious()
+        {
+            return Input.GetKeyDown(KeyCode.Comma) || InputStringContains('<');
+        }
+
+        private bool PressedColorDepthNext()
+        {
+            return Input.GetKeyDown(KeyCode.Period) || InputStringContains('>');
+        }
+
+        private static bool InputStringContains(params char[] candidates)
+        {
+            string input = Input.inputString;
+            if (string.IsNullOrEmpty(input))
+            {
+                return false;
+            }
+
+            for (int i = 0; i < input.Length; i++)
+            {
+                char value = input[i];
+                for (int j = 0; j < candidates.Length; j++)
+                {
+                    if (value == candidates[j])
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
         private bool Held(KeyCode key)
         {
             return Input.GetKey(key);
         }
 
+        private bool ControlHeld()
+        {
+            return Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+        }
+
+        private bool ShiftHeld()
+        {
+            return Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+        }
+
+        private bool AltHeld()
+        {
+            return Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
+        }
+
+        private void SelectSourceCategory(KaleidoscopeSourceCategory category)
+        {
+            if (sourceLibrary != null)
+            {
+                sourceLibrary.SetCategory(category);
+                Feedback($"Source Category: {category}");
+                return;
+            }
+
+            if (sourceModeController == null)
+            {
+                return;
+            }
+
+            switch (category)
+            {
+                case KaleidoscopeSourceCategory.TransparentGemstones:
+                    sourceModeController.SetMode(KaleidoscopeSourceModeKind.Gemstones);
+                    break;
+                case KaleidoscopeSourceCategory.PolygonalGeometry:
+                    sourceModeController.SetMode(KaleidoscopeSourceModeKind.PolygonGeometry);
+                    break;
+                case KaleidoscopeSourceCategory.ColoredGlass:
+                    sourceModeController.SetMode(KaleidoscopeSourceModeKind.ColoredGlassPhysical);
+                    break;
+                case KaleidoscopeSourceCategory.ProceduralColorBlobs:
+                    sourceModeController.SetMode(KaleidoscopeSourceModeKind.ProceduralColorBlobs);
+                    break;
+                case KaleidoscopeSourceCategory.Liquids:
+                    sourceModeController.SetMode(KaleidoscopeSourceModeKind.LiquidIllusion);
+                    break;
+                case KaleidoscopeSourceCategory.ExperimentalSources:
+                    sourceModeController.SetMode(KaleidoscopeSourceModeKind.Experimental);
+                    break;
+                case KaleidoscopeSourceCategory.Backgrounds:
+                case KaleidoscopeSourceCategory.UserImages:
+                    sourceModeController.SetMode(KaleidoscopeSourceModeKind.ImageWallpaper);
+                    break;
+            }
+
+            Feedback($"Source: {sourceModeController.CurrentModeName}");
+        }
+
+        private void ToggleGuide(KaleidoscopeGuideFlags guide, string message)
+        {
+            operatorModeController?.SetOperatorMode();
+            guideOverlay?.ToggleGuide(guide);
+            Feedback(message);
+        }
+
+        private bool IsExperimentalSourceMode()
+        {
+            return sourceModeController != null && sourceModeController.CurrentMode == KaleidoscopeSourceModeKind.Experimental;
+        }
+
+        private void OpenUserImageBrowser()
+        {
+#if UNITY_EDITOR
+            string path = EditorUtility.OpenFilePanel("Open Kaleidoscope Source Image", string.Empty, "png,jpg,jpeg,tga");
+            if (string.IsNullOrEmpty(path))
+            {
+                return;
+            }
+
+            try
+            {
+                byte[] bytes = File.ReadAllBytes(path);
+                sourceModeController?.RecordImageDiskRead(path);
+                Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                sourceModeController?.RecordImageTextureCreate("Imported user image Texture2D");
+                if (!texture.LoadImage(bytes))
+                {
+                    Destroy(texture);
+                    Feedback("Image import failed");
+                    return;
+                }
+
+                texture.name = Path.GetFileNameWithoutExtension(path);
+                if (sourceLibrary != null)
+                {
+                    sourceLibrary.LoadUserImage(texture, texture.name);
+                    Feedback($"Image Source: {texture.name}");
+                }
+                else
+                {
+                    sourceModeController?.SetImageSourceTextures(new[] { texture });
+                    sourceModeController?.SetMode(KaleidoscopeSourceModeKind.ImageWallpaper);
+                    Feedback($"Image Source: {texture.name}");
+                }
+            }
+            catch (Exception exception)
+            {
+                Feedback($"Image import failed: {exception.Message}");
+            }
+#else
+            Feedback("Image browser is available in the Unity Editor");
+#endif
+        }
+
+        private void RequestOperatorConsole()
+        {
+#if UNITY_EDITOR
+            Type windowType = Type.GetType("KaleidoscopeEngine.EditorTools.KaleidoscopeOperatorConsoleWindow, Assembly-CSharp-Editor");
+            if (windowType == null)
+            {
+                return;
+            }
+
+            EditorWindow window = EditorWindow.GetWindow(windowType, false, "Operator Console");
+            window.Show();
+#endif
+        }
+
         private void Feedback(string message)
         {
+            if (debugPanel != null)
+            {
+                debugPanel.PostOperatorMessage(message);
+                return;
+            }
+
             helpOverlay?.ShowFeedback(message);
+        }
+
+        private void FeedbackRenderQuality(string prefix)
+        {
+            Feedback(mirrorPipeline != null
+                ? $"{prefix}: {mirrorPipeline.QualityClampStatus}; RT {mirrorPipeline.RenderTextureWidth}x{mirrorPipeline.RenderTextureHeight}; SSAA {mirrorPipeline.SupersamplingFactor:F2}x; AA {mirrorPipeline.AntiAliasingSamples}x"
+                : prefix);
+        }
+
+        private void LogInputDebug(string message)
+        {
+            if (debugInputLogging)
+            {
+                debugPanel?.PostOperatorMessage(message);
+            }
         }
 
         private void HeldFeedback(string message)
@@ -523,9 +1120,9 @@ namespace KaleidoscopeEngine.UI
 
         private void CaptureScreenshot()
         {
-            string directory = Path.Combine(Application.persistentDataPath, "KaleidoscopeCaptures");
+            string directory = Path.Combine(UnityEngine.Application.persistentDataPath, "KaleidoscopeCaptures");
             Directory.CreateDirectory(directory);
-            string fileName = $"kaleidoscope_{System.DateTime.Now:yyyyMMdd_HHmmss}.png";
+            string fileName = $"kaleidoscope_{DateTime.Now:yyyyMMdd_HHmmss}.png";
             string path = Path.Combine(directory, fileName);
             ScreenCapture.CaptureScreenshot(path, 2);
             Feedback($"Screenshot: {fileName}");

@@ -25,58 +25,113 @@ namespace KaleidoscopeEngine.EditorTools
         private static readonly Dictionary<string, HelpRow[]> Sections = new Dictionary<string, HelpRow[]>
         {
             {
-                "View Modes",
+                "SRC Source Modes",
                 new[]
                 {
-                    new HelpRow("Insert", "Cycle view", "Eyepiece / Raw / Source / Orbit"),
-                    new HelpRow("Delete", "Eyepiece home", "Return to the final optical view"),
-                    new HelpRow("Home / End", "Center exposure", "Raise or lower the luminous origin"),
-                    new HelpRow("Page Up / Down", "Optical density", "Add or reduce mosaic source density")
+                    new HelpRow("Alt + 1", "Gemstones", "Physical gemstone chamber"),
+                    new HelpRow("Alt + 2", "Colored glass", "Physical colored shard source"),
+                    new HelpRow("Alt + 3", "Images", "User image / wallpaper source"),
+                    new HelpRow("Alt + 4", "Procedural blobs", "Soft procedural color fields"),
+                    new HelpRow("Alt + 5", "Geometry", "Polygon source category"),
+                    new HelpRow("Alt + 6", "Liquids", "Liquid shader source"),
+                    new HelpRow("Alt + 7", "Hybrid", "Future combined source"),
+                    new HelpRow("Alt + 8", "Experimental", "Experimental source category"),
+                    new HelpRow("Alt + Right", "Next preset", "Step forward in the active source category"),
+                    new HelpRow("Alt + Left", "Previous preset", "Step backward in the active source category"),
+                    new HelpRow("Alt + R", "Randomize source", "Generate a variation of the current source"),
+                    new HelpRow("Alt + Backspace", "Reset source", "Reset the current source mode")
                 }
             },
             {
-                "Geometry",
+                "GDE Optical Guides",
+                new[]
+                {
+                    new HelpRow("Ctrl + 1", "Mirror wedges", "Toggle mirror wedge boundaries"),
+                    new HelpRow("Ctrl + 2", "Source coverage", "Toggle source coverage visualization"),
+                    new HelpRow("Ctrl + 3", "Transfer region", "Toggle source-to-mirror transfer guide"),
+                    new HelpRow("Ctrl + 4", "Convergence", "Toggle optical convergence guides"),
+                    new HelpRow("Ctrl + 5", "Center", "Toggle center composition guides"),
+                    new HelpRow("Ctrl + 6", "Safe zones", "Toggle safe viewing/framing zones"),
+                    new HelpRow("Ctrl + 7", "Density heatmap", "Toggle source density heatmap"),
+                    new HelpRow("Ctrl + 8", "RT preview", "Toggle RenderTexture preview"),
+                    new HelpRow("Ctrl + 9", "Optical flow", "Toggle optical flow visualization"),
+                    new HelpRow("Ctrl + 0", "Hide guides", "Hide all guide overlays")
+                }
+            },
+            {
+                "VIEW Viewer Controls",
+                new[]
+                {
+                    new HelpRow("Shift + F1", "Viewer Mode", "Clean cinematic image, no diagnostics"),
+                    new HelpRow("Shift + F2", "Operator Mode", "Guides and console workflow"),
+                    new HelpRow("Insert", "Cycle view", "Eyepiece / Raw / Source / Orbit"),
+                    new HelpRow("Delete", "Eyepiece home", "Return to the final optical view"),
+                    new HelpRow("Home / End", "Center exposure", "Raise or lower the luminous origin"),
+                    new HelpRow("Page Up / Down", "Optical density", "Add or reduce mosaic source density"),
+                    new HelpRow("Left / Right", "Spin speed", "Decrease or increase final image rotation"),
+                    new HelpRow("Up / Down", "Image zoom", "Zoom final texture-space kaleidoscope"),
+                    new HelpRow("< / >", "Color depth", "Previous / next final palette quantization mode"),
+                    new HelpRow("Ctrl + F", "Auto visual quality", "Apply premium final color tuning without rebuilding the scene"),
+                    new HelpRow("Middle Mouse", "Launcher menu", "Open or close the runtime launcher"),
+                    new HelpRow("Shift + Arrows", "Tube/source", "Tube speed and source framing")
+                }
+            },
+            {
+                "GEO Geometry",
                 new[]
                 {
                     new HelpRow("Numpad 1", "6 sectors", "60 degree standard prism"),
                     new HelpRow("Numpad 2", "8 sectors", "45 degree mirror angle"),
                     new HelpRow("Numpad 3", "12 sectors", "30 degree mirror angle"),
                     new HelpRow("Numpad 4 / 6", "Mirror rotation", "Turn the polar fold"),
+                    new HelpRow("Numpad 5", "Stop rotation", "Stop tube and pattern motion"),
                     new HelpRow("Numpad 7", "Asymmetry", "Tiny optical irregularity"),
                     new HelpRow("Numpad 8", "Seam blending", "Continuity at wedge joins"),
                     new HelpRow("Numpad 9", "Optical mask", "Eyepiece edge"),
-                    new HelpRow("Numpad + / -", "Rotational drift", "More or less living motion"),
-                    new HelpRow("Numpad * / /", "Breathing / wobble", "Organic optics toggles"),
-                    new HelpRow("Numpad 0", "Diffuser", "Backlight object chamber")
+                    new HelpRow("Numpad + / -", "Tube speed", "Step chamber rotation"),
+                    new HelpRow("Q / E or Й / У", "Tube speed", "Hold sweep through -200..200 deg/s"),
+                    new HelpRow("Numpad * / /", "Breathing / wobble", "Organic optics toggles")
                 }
             },
             {
-                "Camera",
-                new[]
-                {
-                    new HelpRow("Left / Right", "Viewer rotation", "Rotate the framed eyepiece"),
-                    new HelpRow("Up / Down", "Viewer zoom", "Fill or relax the frame"),
-                    new HelpRow("Shift + Left / Right", "Source orbit", "Rotate object chamber sampling"),
-                    new HelpRow("Shift + Up / Down", "Source framing", "Move source composition")
-                }
-            },
-            {
-                "Debug",
+                "DIA Diagnostics",
                 new[]
                 {
                     new HelpRow("F1", "Help reference", "Play Mode toggles runtime overlay; Edit Mode opens this window"),
-                    new HelpRow("F2", "Compact debug", "Small technical status panel"),
-                    new HelpRow("F3", "Full debug", "Detailed system readout"),
-                    new HelpRow("F4", "Hide debug UI", "Clean composition"),
-                    new HelpRow("F5", "Reset tuning", "Restore visual defaults"),
+                    new HelpRow("F2 / F3", "Operator console", "Open the separate diagnostics console"),
+                    new HelpRow("F4", "Clean image", "Hide help and guide overlays"),
                     new HelpRow("F6", "Screenshot", "Capture current eyepiece"),
+                    new HelpRow("Window > Kaleidoscope > Operator Console", "Diagnostics", "FPS, warnings, bottlenecks, comfort, rendering"),
+                    new HelpRow("Window > Kaleidoscope > Source Library", "Sources", "Thumbnails, presets, import, compatibility")
+                }
+            },
+            {
+                "FPS Performance",
+                new[]
+                {
+                    new HelpRow("F5", "Reset tuning", "Restore visual defaults"),
                     new HelpRow("F7 / F8", "Quality", "Step fidelity down or up"),
-                    new HelpRow("Shift + F7 / F8", "Quality extremes", "Jump to Minimal or Extreme")
+                    new HelpRow("Shift + F7 / F8", "Quality extremes", "Jump to Minimal or Extreme"),
+                    new HelpRow("F9", "Adaptive quality", "Toggle FPS governor"),
+                    new HelpRow("Shift + F9", "Auto-balance", "Toggle recovery tuning"),
+                    new HelpRow("Ctrl + A", "Auto scenario", "Toggle automatic effect orchestration"),
+                    new HelpRow("F10 / F11", "Performance preset", "Step budget down or up"),
+                    new HelpRow("Shift + F10", "Scenario", "Enable or disable automatic effect orchestration"),
+                    new HelpRow("Shift + F11", "Next scenario", "Cycle Calm Flow / Jewel Storm / Slow Hypnosis / Fast Geometry / Music Video / Experimental"),
+                    new HelpRow("F12", "Safe mode", "Force emergency recovery")
                 }
             }
         };
 
-        private static readonly string[] SectionOrder = { "View Modes", "Geometry", "Camera", "Debug" };
+        private static readonly string[] SectionOrder =
+        {
+            "SRC Source Modes",
+            "GDE Optical Guides",
+            "VIEW Viewer Controls",
+            "GEO Geometry",
+            "DIA Diagnostics",
+            "FPS Performance"
+        };
 
         private Vector2 scrollPosition;
         private GUIStyle titleStyle;
@@ -129,7 +184,7 @@ namespace KaleidoscopeEngine.EditorTools
             }
 
             EditorGUILayout.Space(8f);
-            EditorGUILayout.HelpBox("Window > Kaleidoscope > Operator Panel is reserved for a future tuning console. This task implements the Control Help window only.", MessageType.Info);
+            EditorGUILayout.HelpBox("Viewer Mode keeps the Game View clean. Operator Mode uses the separate Operator Console and optional guide overlays for tuning.", MessageType.Info);
 
             EditorGUILayout.EndScrollView();
         }

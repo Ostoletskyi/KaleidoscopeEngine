@@ -5,6 +5,9 @@ namespace KaleidoscopeEngine.PhysicsSandbox
     [DisallowMultipleComponent]
     public sealed class KaleidoscopePhysicsChamber : MonoBehaviour
     {
+        private const float MinimumAxialSpeed = -200f;
+        private const float MaximumAxialSpeed = 200f;
+
         [Header("References")]
         [Tooltip("Transform that owns the chamber colliders and visible shell.")]
         [SerializeField] private Transform chamberTransform;
@@ -16,9 +19,10 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         [Header("Axial Tube Rotation")]
         [SerializeField] private bool axialRotationEnabled = true;
         [SerializeField] private float axialRotationSpeed = 12f;
+        [SerializeField] private float defaultAxialRotationSpeed = 12f;
         [SerializeField] private float axialRotationDirection = 1f;
-        [SerializeField] private float minSpeed = -600f;
-        [SerializeField] private float maxSpeed = 600f;
+        [SerializeField] private float minSpeed = -200f;
+        [SerializeField] private float maxSpeed = 200f;
         [SerializeField] private float acceleration = 10f;
         [SerializeField] private float damping = 5f;
         [SerializeField, Range(0.1f, 3f)] private float angularSmoothing = 0.55f;
@@ -44,10 +48,10 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         [SerializeField] private float driftFrequency = 0.23f;
 
         [Header("Micro Vibration")]
-        [SerializeField] private bool microVibration = true;
-        [SerializeField] private float vibrationRotationDegrees = 0.18f;
-        [SerializeField] private float vibrationPositionAmplitude = 0.004f;
-        [SerializeField] private float vibrationFrequency = 6f;
+        [SerializeField] private bool microVibration;
+        [SerializeField] private float vibrationRotationDegrees = 0.04f;
+        [SerializeField] private float vibrationPositionAmplitude = 0.001f;
+        [SerializeField] private float vibrationFrequency = 3.5f;
 
         [Header("Shake")]
         [SerializeField] private float shakeDuration = 0.28f;
@@ -73,7 +77,15 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         public float RequestedRotationSpeed => requestedWorldRotationSpeed;
         public bool AxialRotationEnabled => axialRotationEnabled;
         public float AxialRotationSpeed => axialRotationSpeed;
+        public float TubeAxialRotationSpeedDeg => axialRotationSpeed;
+        public float RequestedTubeAxialSpeedDeg => axialRotationSpeed;
+        public float EffectiveTubeAxialSpeedDeg => currentAxialRotationSpeed;
         public float EffectiveAxialRotationSpeedCap => adaptiveAxialSpeedCap >= 0f ? adaptiveAxialSpeedCap : maxSpeed;
+        public float MinAxialRotationSpeed => minSpeed;
+        public float MaxAxialRotationSpeed => maxSpeed;
+        public float RotationAcceleration => acceleration;
+        public float RotationDamping => damping;
+        public float RotationSmoothing => angularSmoothing;
         public float AngularSmoothing => angularSmoothing;
         public float RotationalMass => rotationalMass;
         public float OpticalMomentum => opticalMomentum;
@@ -96,10 +108,16 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
         private void Awake()
         {
+            EnforceAxialSpeedRange();
             chamberTransform = ChamberTransform;
             initialRotation = chamberTransform.localRotation;
             initialPosition = chamberTransform.localPosition;
             PrepareKinematicBody();
+        }
+
+        private void OnValidate()
+        {
+            EnforceAxialSpeedRange();
         }
 
         private void FixedUpdate()
@@ -190,7 +208,51 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
         public void AdjustAxialRotationSpeed(float delta)
         {
+            EnforceAxialSpeedRange();
             axialRotationSpeed = Mathf.Clamp(axialRotationSpeed + delta, minSpeed, maxSpeed);
+            axialRotationEnabled = !Mathf.Approximately(axialRotationSpeed, 0f);
+        }
+
+        public void SetAxialRotationSpeed(float speed)
+        {
+            EnforceAxialSpeedRange();
+            axialRotationSpeed = Mathf.Clamp(speed, minSpeed, maxSpeed);
+            axialRotationEnabled = !Mathf.Approximately(axialRotationSpeed, 0f);
+        }
+
+        public void StopAxialRotation()
+        {
+            axialRotationSpeed = 0f;
+            axialRotationEnabled = false;
+        }
+
+        public void RestoreDefaultAxialRotation()
+        {
+            axialRotationSpeed = Mathf.Clamp(defaultAxialRotationSpeed, minSpeed, maxSpeed);
+            axialRotationEnabled = true;
+        }
+
+        public void ApplyTemporalStability(float motionDamping, float smoothing, float maxComfortSpeed)
+        {
+            angularSmoothing = Mathf.Clamp01(Mathf.Max(angularSmoothing, smoothing));
+            opticalMomentum = Mathf.Clamp01(Mathf.Max(opticalMomentum, motionDamping));
+            acceleration = Mathf.Min(acceleration, Mathf.Lerp(12f, 4f, motionDamping));
+            damping = Mathf.Max(damping, Mathf.Lerp(5f, 12f, motionDamping));
+            vibrationFrequency = Mathf.Min(vibrationFrequency, 7f);
+            vibrationRotationDegrees = Mathf.Min(vibrationRotationDegrees, 0.08f);
+            vibrationPositionAmplitude = Mathf.Min(vibrationPositionAmplitude, 0.0018f);
+            SetAdaptiveAxialSpeedCap(maxComfortSpeed);
+        }
+
+        public void ApplyEmergencyMotionStability()
+        {
+            SetAxialRotationSpeed(Mathf.Clamp(axialRotationSpeed, -8f, 8f));
+            SetAdaptiveAxialSpeedCap(8f);
+            acceleration = Mathf.Min(acceleration, 4f);
+            damping = Mathf.Max(damping, 12f);
+            angularSmoothing = Mathf.Max(angularSmoothing, 0.85f);
+            opticalMomentum = Mathf.Max(opticalMomentum, 0.88f);
+            microVibration = false;
         }
 
         public void ToggleAxialRotation()
@@ -205,7 +267,8 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
         public void SetAdaptiveAxialSpeedCap(float cap)
         {
-            adaptiveAxialSpeedCap = Mathf.Max(0f, cap);
+            EnforceAxialSpeedRange();
+            adaptiveAxialSpeedCap = Mathf.Clamp(cap, 0f, Mathf.Max(0f, maxSpeed));
         }
 
         public void ClearAdaptiveAxialSpeedCap()
@@ -254,6 +317,18 @@ namespace KaleidoscopeEngine.PhysicsSandbox
             chamberBody.useGravity = false;
             chamberBody.interpolation = RigidbodyInterpolation.Interpolate;
             chamberBody.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+        }
+
+        private void EnforceAxialSpeedRange()
+        {
+            minSpeed = MinimumAxialSpeed;
+            maxSpeed = MaximumAxialSpeed;
+            axialRotationSpeed = Mathf.Clamp(axialRotationSpeed, minSpeed, maxSpeed);
+            defaultAxialRotationSpeed = Mathf.Clamp(defaultAxialRotationSpeed, minSpeed, maxSpeed);
+            if (adaptiveAxialSpeedCap >= 0f)
+            {
+                adaptiveAxialSpeedCap = Mathf.Clamp(adaptiveAxialSpeedCap, 0f, maxSpeed);
+            }
         }
 
         private void MoveChamber(Vector3 localPosition, Quaternion localRotation)

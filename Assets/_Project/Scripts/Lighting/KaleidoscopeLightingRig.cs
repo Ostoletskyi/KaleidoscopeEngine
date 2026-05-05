@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System;
 using System.Reflection;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace KaleidoscopeEngine.Lighting
 {
@@ -50,7 +49,8 @@ namespace KaleidoscopeEngine.Lighting
 
         private readonly List<LightingPreset> presets = new List<LightingPreset>();
         private int activePresetIndex;
-        private Volume postProcessVolume;
+        private Component postProcessVolume;
+        private object postProcessProfile;
 
         public string ActivePresetName => presets.Count > 0 ? presets[activePresetIndex].displayName : "Runtime Jewelry Studio";
         public bool MovingLightEnabled => movingLightEnabled;
@@ -225,24 +225,35 @@ namespace KaleidoscopeEngine.Lighting
 
         private void BuildPostProcessVolume()
         {
+            Type volumeType = Type.GetType("UnityEngine.Rendering.Volume, Unity.RenderPipelines.Core.Runtime");
+            Type profileType = Type.GetType("UnityEngine.Rendering.VolumeProfile, Unity.RenderPipelines.Core.Runtime");
+            if (volumeType == null || profileType == null)
+            {
+                Debug.LogWarning("KaleidoscopeLightingRig: SRP Volume API was not found. Post FX volume setup skipped.");
+                return;
+            }
+
             GameObject volumeObject = new GameObject("Optical Gemstone Post FX");
             volumeObject.transform.SetParent(transform, false);
-            postProcessVolume = volumeObject.AddComponent<Volume>();
-            postProcessVolume.isGlobal = true;
-            postProcessVolume.priority = 10f;
-            postProcessVolume.profile = ScriptableObject.CreateInstance<VolumeProfile>();
+            postProcessVolume = volumeObject.AddComponent(volumeType);
+            postProcessProfile = ScriptableObject.CreateInstance(profileType);
+
+            SetMemberValue(postProcessVolume, "isGlobal", true);
+            SetMemberValue(postProcessVolume, "priority", 10f);
+            SetMemberValue(postProcessVolume, "profile", postProcessProfile);
             ApplyPostProcessValues();
         }
 
         private void ApplyPostProcessValues()
         {
-            if (postProcessVolume == null || postProcessVolume.profile == null)
+            if (postProcessVolume == null || postProcessProfile == null)
             {
                 return;
             }
 
             // HDRP post-processing components are package-specific. This runtime volume
-            // is configured by reflection so this script remains safe if HDRP package names move.
+            // is configured by reflection so this script remains safe if SRP assemblies
+            // are not referenced by the gameplay assembly at compile time.
             TryConfigureHdrpPostProcess();
         }
 
@@ -267,15 +278,15 @@ namespace KaleidoscopeEngine.Lighting
         private void AddAndSetComponent(string typeName, params (string fieldName, object value)[] values)
         {
             Type componentType = Type.GetType(typeName);
-            if (componentType == null || postProcessVolume == null || postProcessVolume.profile == null)
+            if (componentType == null || postProcessProfile == null)
             {
                 return;
             }
 
-            VolumeComponent component = FindVolumeComponent(componentType);
+            object component = FindVolumeComponent(componentType);
             if (component == null)
             {
-                component = postProcessVolume.profile.Add(componentType, true);
+                component = AddVolumeComponent(componentType);
             }
 
             if (component == null)
@@ -289,14 +300,34 @@ namespace KaleidoscopeEngine.Lighting
             }
         }
 
-        private VolumeComponent FindVolumeComponent(Type componentType)
+        private object FindVolumeComponent(Type componentType)
         {
-            if (postProcessVolume == null || postProcessVolume.profile == null)
+            if (postProcessProfile == null)
             {
                 return null;
             }
 
-            foreach (VolumeComponent component in postProcessVolume.profile.components)
+            object components = GetMemberValue(postProcessProfile, "components");
+            IEnumerable<object> enumerable = components as IEnumerable<object>;
+            if (enumerable == null && components is System.Collections.IEnumerable rawEnumerable)
+            {
+                foreach (object component in rawEnumerable)
+                {
+                    if (component != null && component.GetType() == componentType)
+                    {
+                        return component;
+                    }
+                }
+
+                return null;
+            }
+
+            if (enumerable == null)
+            {
+                return null;
+            }
+
+            foreach (object component in enumerable)
             {
                 if (component != null && component.GetType() == componentType)
                 {
@@ -307,8 +338,24 @@ namespace KaleidoscopeEngine.Lighting
             return null;
         }
 
-        private static void SetVolumeParameter(VolumeComponent component, string fieldName, object value)
+        private object AddVolumeComponent(Type componentType)
         {
+            if (postProcessProfile == null || componentType == null)
+            {
+                return null;
+            }
+
+            MethodInfo addMethod = postProcessProfile.GetType().GetMethod("Add", new[] { typeof(Type), typeof(bool) });
+            return addMethod != null ? addMethod.Invoke(postProcessProfile, new object[] { componentType, true }) : null;
+        }
+
+        private static void SetVolumeParameter(object component, string fieldName, object value)
+        {
+            if (component == null)
+            {
+                return;
+            }
+
             FieldInfo field = component.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.Public);
             object parameter = field != null ? field.GetValue(component) : null;
             if (parameter == null)
@@ -320,6 +367,43 @@ namespace KaleidoscopeEngine.Lighting
             PropertyInfo valueProperty = parameter.GetType().GetProperty("value");
             overrideState?.SetValue(parameter, true);
             valueProperty?.SetValue(parameter, value);
+        }
+
+        private static object GetMemberValue(object targetObject, string memberName)
+        {
+            if (targetObject == null)
+            {
+                return null;
+            }
+
+            Type type = targetObject.GetType();
+            PropertyInfo property = type.GetProperty(memberName, BindingFlags.Instance | BindingFlags.Public);
+            if (property != null)
+            {
+                return property.GetValue(targetObject);
+            }
+
+            FieldInfo field = type.GetField(memberName, BindingFlags.Instance | BindingFlags.Public);
+            return field != null ? field.GetValue(targetObject) : null;
+        }
+
+        private static void SetMemberValue(object targetObject, string memberName, object value)
+        {
+            if (targetObject == null)
+            {
+                return;
+            }
+
+            Type type = targetObject.GetType();
+            PropertyInfo property = type.GetProperty(memberName, BindingFlags.Instance | BindingFlags.Public);
+            if (property != null)
+            {
+                property.SetValue(targetObject, value);
+                return;
+            }
+
+            FieldInfo field = type.GetField(memberName, BindingFlags.Instance | BindingFlags.Public);
+            field?.SetValue(targetObject, value);
         }
     }
 }

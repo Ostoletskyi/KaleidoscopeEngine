@@ -72,6 +72,15 @@ namespace KaleidoscopeEngine.FX
             }
         }
 
+        public void SetPhysicalArtifactRenderingSuppressed(bool suppressed)
+        {
+            sparkleEnabled = !suppressed;
+            if (suppressed)
+            {
+                HideAll();
+            }
+        }
+
         public void AdjustSparkleIntensity(float delta)
         {
             sparkleIntensity = Mathf.Clamp(sparkleIntensity + delta, 0f, 3f);
@@ -104,6 +113,33 @@ namespace KaleidoscopeEngine.FX
             sparkleFrequency = Mathf.Clamp(RequestedSparkleFrequency * Mathf.Clamp01(frequencyMultiplier), 0f, RequestedSparkleFrequency);
             EnsurePool();
             HideSparklesBeyondQualityLimit();
+        }
+
+        public void ApplyViewerComfort(float updateRate, float persistence, float flickerLimit, float maxBrightness)
+        {
+            sparkleUpdateRate = Mathf.Clamp(updateRate, 10f, 15f);
+            rendererRefreshRate = Mathf.Clamp(rendererRefreshRate, 5f, 10f);
+            highlightPersistence = Mathf.Clamp01(persistence);
+            subpixelStability = Mathf.Max(subpixelStability, 0.72f);
+            sparkleClamp = Mathf.Clamp01(1f - flickerLimit * 0.5f);
+            sparkleIntensity = Mathf.Min(sparkleIntensity, maxBrightness);
+            sparkleFrequency = Mathf.Min(sparkleFrequency, 18f);
+            sparkleRandomness = Mathf.Min(sparkleRandomness, 0.14f);
+            sparkleLifetime = Mathf.Max(sparkleLifetime, 0.45f);
+        }
+
+        public void ApplyEmergencyStability()
+        {
+            sparkleUpdateRate = Mathf.Min(sparkleUpdateRate, 10f);
+            rendererRefreshRate = Mathf.Min(rendererRefreshRate, 5f);
+            highlightPersistence = Mathf.Max(highlightPersistence, 0.92f);
+            subpixelStability = Mathf.Max(subpixelStability, 0.9f);
+            sparkleClamp = Mathf.Min(sparkleClamp, 0.72f);
+            sparkleIntensity = Mathf.Min(sparkleIntensity, 0.45f);
+            sparkleFrequency = Mathf.Min(sparkleFrequency, 10f);
+            sparkleRandomness = Mathf.Min(sparkleRandomness, 0.04f);
+            sparkleLifetime = Mathf.Max(sparkleLifetime, 0.75f);
+            SetAdaptiveSparkleLimit(Mathf.Min(EffectiveMaxActiveSparkles, 28), 0.45f);
         }
 
         public void ClearAdaptiveSparkleLimit()

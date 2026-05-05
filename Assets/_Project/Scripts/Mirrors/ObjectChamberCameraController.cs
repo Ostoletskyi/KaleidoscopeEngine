@@ -19,6 +19,10 @@ namespace KaleidoscopeEngine.Mirrors
         [SerializeField] private float sourceOrbitAngle;
         [SerializeField] private Vector3 sourceLookAtTarget = new Vector3(1.65f, 0f, 0f);
         [SerializeField] private Vector3 objectChamberFocusPoint = new Vector3(1.65f, 0f, 0f);
+        [SerializeField, Min(0.1f)] private float sourceFocusDistanceToCassette = 1.2f;
+        [SerializeField, Range(0.5f, 4f)] private float sourceCassetteZoom = 1.45f;
+        [SerializeField, Range(0.5f, 1.25f)] private float sourceCassetteFillAmount = 0.92f;
+        [SerializeField] private bool frameRearCassette = true;
 
         [Header("Source Inclusion")]
         [SerializeField] private bool includeRibs;
@@ -32,6 +36,9 @@ namespace KaleidoscopeEngine.Mirrors
         public Vector3 ObjectChamberFocusPoint => objectChamberFocusPoint;
         public Vector2 SourceCenterOffset => sourceCenterOffset;
         public float SourceOrbitAngle => sourceOrbitAngle;
+        public float SourceFocusDistanceToCassette => sourceFocusDistanceToCassette;
+        public float SourceCassetteZoom => sourceCassetteZoom;
+        public float SourceCassetteFillAmount => sourceCassetteFillAmount;
 
         public void Configure(Camera camera, OpticalSourceChamber chamber)
         {
@@ -78,7 +85,8 @@ namespace KaleidoscopeEngine.Mirrors
             Vector3 focus = objectChamberFocusPoint;
             Vector2 rotatedOffset = RotateOffset(sourceCenterOffset, sourceOrbitAngle);
             Vector3 target = sourceLookAtTarget + new Vector3(0f, rotatedOffset.y, rotatedOffset.x);
-            Vector3 localCameraPosition = new Vector3(focus.x - Mathf.Max(0.2f, sourceDistance), rotatedOffset.y, rotatedOffset.x);
+            float distance = frameRearCassette ? sourceFocusDistanceToCassette : sourceDistance;
+            Vector3 localCameraPosition = new Vector3(focus.x - Mathf.Max(0.2f, distance), rotatedOffset.y, rotatedOffset.x);
 
             Vector3 worldCameraPosition = sourceTransform.TransformPoint(localCameraPosition);
             Vector3 worldTargetPosition = sourceTransform.TransformPoint(target);
@@ -91,7 +99,8 @@ namespace KaleidoscopeEngine.Mirrors
             Quaternion lookRotation = Quaternion.LookRotation(forward.normalized, sourceTransform.up);
             Quaternion roll = Quaternion.AngleAxis(sourceOrbitAngle, forward.normalized);
             sourceCamera.transform.SetPositionAndRotation(worldCameraPosition, roll * lookRotation);
-            sourceCamera.fieldOfView = sourceFov / Mathf.Max(0.1f, sourceZoom);
+            float zoom = frameRearCassette ? sourceZoom * sourceCassetteZoom / Mathf.Max(0.1f, sourceCassetteFillAmount) : sourceZoom;
+            sourceCamera.fieldOfView = sourceFov / Mathf.Max(0.1f, zoom);
         }
 
         private static Vector2 RotateOffset(Vector2 offset, float degrees)

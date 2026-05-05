@@ -26,15 +26,24 @@ namespace KaleidoscopeEngine.UI
         [SerializeField] private KaleidoscopeRenderPipeline mirrorPipeline;
         [SerializeField] private KaleidoscopeMirrorController mirrorController;
         [SerializeField] private GemstoneSpawner spawner;
+        [SerializeField] private KaleidoscopeDebugPanel statusPanel;
 
         [Header("Display")]
         [SerializeField] private bool visible;
         [SerializeField, Range(0.05f, 1f)] private float overlayOpacity = 0.84f;
         [SerializeField, Range(0.05f, 1f)] private float backgroundDim = 0.48f;
         [SerializeField] private float fadeSpeed = 8f;
-        [SerializeField] private float feedbackDuration = 1.35f;
 
         private readonly Dictionary<string, List<HelpRow>> sections = new Dictionary<string, List<HelpRow>>();
+        private readonly string[] sectionOrder =
+        {
+            "ИСТОЧНИКИ",
+            "НАПРАВЛЯЮЩИЕ",
+            "ОКУЛЯР И ВРАЩЕНИЕ",
+            "ГЕОМЕТРИЯ",
+            "ДИАГНОСТИКА",
+            "КАЧЕСТВО И FPS"
+        };
         private GUIStyle titleStyle;
         private GUIStyle sectionStyle;
         private GUIStyle keyStyle;
@@ -43,8 +52,6 @@ namespace KaleidoscopeEngine.UI
         private GUIStyle footerStyle;
         private Texture2D pixel;
         private float fade;
-        private string feedbackText;
-        private float feedbackUntil;
         private const float RuntimeToggleDebounceSeconds = 0.08f;
         private static int lastRuntimeToggleFrame = -1;
         private static float lastRuntimeToggleRealtime = -100f;
@@ -92,6 +99,11 @@ namespace KaleidoscopeEngine.UI
             BuildSections();
         }
 
+        public void ConfigureStatusPanel(KaleidoscopeDebugPanel panel)
+        {
+            statusPanel = panel;
+        }
+
         public void Toggle()
         {
             visible = !visible;
@@ -109,8 +121,12 @@ namespace KaleidoscopeEngine.UI
                 return;
             }
 
-            feedbackText = message;
-            feedbackUntil = Time.unscaledTime + feedbackDuration;
+            if (statusPanel == null)
+            {
+                statusPanel = FindObjectOfType<KaleidoscopeDebugPanel>();
+            }
+
+            statusPanel?.PostOperatorMessage(message);
         }
 
         private void Awake()
@@ -133,56 +149,98 @@ namespace KaleidoscopeEngine.UI
                 DrawHelp();
             }
 
-            DrawFeedback();
         }
 
         private void BuildSections()
         {
             sections.Clear();
-            sections["VIEW MODES"] = new List<HelpRow>
+            sections["ИСТОЧНИКИ"] = new List<HelpRow>
             {
-                new HelpRow("Insert", "Cycle view", "Eyepiece / Raw / Source / Orbit"),
-                new HelpRow("Delete", "Eyepiece home", "Return to the final optical view"),
-                new HelpRow("Home / End", "Center exposure", "Raise or lower the luminous origin"),
-                new HelpRow("Page Up / Down", "Optical density", "Add or reduce mosaic source density")
+                new HelpRow("Alt + 1", "Кристаллы", "Физическая камера с прозрачными камнями"),
+                new HelpRow("Alt + 2", "Цветное стекло", "Физические цветные осколки"),
+                new HelpRow("Alt + 3", "Иллюстрации", "Пользовательская картинка / обои"),
+                new HelpRow("Alt + O", "Открыть картинку", "Загрузить изображение с компьютера"),
+                new HelpRow("Alt + 4", "Цветные пятна", "Процедурный источник без физики"),
+                new HelpRow("Alt + 5", "Геометрия", "Многоугольники и абстрактные формы"),
+                new HelpRow("Alt + 6", "Жидкости", "Иллюзия масла / воды / ртути"),
+                new HelpRow("Alt + 7", "Hybrid", "Комбинированный режим"),
+                new HelpRow("Alt + 8", "Experimental", "Экспериментальные источники"),
+                new HelpRow("Alt + Left / Right", "Пресеты", "Предыдущий / следующий источник"),
+                new HelpRow("Alt + R", "Случайно", "Рандомизировать текущий источник"),
+                new HelpRow("Alt + Backspace", "Сброс", "Сбросить текущий источник")
             };
 
-            sections["GEOMETRY"] = new List<HelpRow>
+            sections["НАПРАВЛЯЮЩИЕ"] = new List<HelpRow>
             {
-                new HelpRow("Numpad 1", "6 sectors", "60 degree standard prism"),
-                new HelpRow("Numpad 2", "8 sectors", "45 degree mirror angle"),
-                new HelpRow("Numpad 3", "12 sectors", "30 degree mirror angle"),
-                new HelpRow("Numpad 4 / 6", "Mirror rotation", "Turn the polar fold"),
-                new HelpRow("Numpad 7", "Asymmetry", "Tiny optical irregularity"),
-                new HelpRow("Numpad 8", "Seam blending", "Continuity at wedge joins"),
-                new HelpRow("Numpad 9", "Optical mask", "Eyepiece edge"),
-                new HelpRow("Numpad + / -", "Rotational drift", "More or less living motion"),
-                new HelpRow("Numpad * / /", "Breathing / wobble", "Organic optics toggles"),
-                new HelpRow("Numpad 0", "Diffuser", "Backlight object chamber")
+                new HelpRow("Ctrl + 1", "Сектора зеркал", "Показать границы клиньев"),
+                new HelpRow("Ctrl + 2", "Покрытие источника", "Где источник попадает в отражения"),
+                new HelpRow("Ctrl + 3", "Передача в зеркало", "Область, которая уходит в зеркальный шейдер"),
+                new HelpRow("Ctrl + 4", "Схождение", "Оптические линии схождения"),
+                new HelpRow("Ctrl + 5", "Центр", "Контроль центральной композиции"),
+                new HelpRow("Ctrl + 6", "Безопасные зоны", "Комфортная зона просмотра"),
+                new HelpRow("Ctrl + 7", "Плотность", "Тепловая карта плотности источника"),
+                new HelpRow("Ctrl + 8", "RT preview", "Просмотр RenderTexture"),
+                new HelpRow("Ctrl + 9", "Поток", "Направление оптического движения"),
+                new HelpRow("Ctrl + 0", "Скрыть", "Убрать все направляющие")
             };
 
-            sections["CAMERA"] = new List<HelpRow>
+            sections["ОКУЛЯР И ВРАЩЕНИЕ"] = new List<HelpRow>
             {
-                new HelpRow("Left / Right", "Viewer rotation", "Rotate the framed eyepiece"),
-                new HelpRow("Up / Down", "Viewer zoom", "Fill or relax the frame"),
-                new HelpRow("Shift + Left / Right", "Source orbit", "Rotate object chamber sampling"),
-                new HelpRow("Shift + Up / Down", "Source framing", "Move source composition")
+                new HelpRow("Insert", "Сменить вид", "Kaleidoscope / Raw / Source / Orbit"),
+                new HelpRow("Delete", "Окуляр", "Вернуться к финальной картинке"),
+                new HelpRow("Left / Right", "Разгон вращения", "Удерживать: плавно менять скорость от -1000 до +1000"),
+                new HelpRow("Up / Down", "Масштаб", "Приблизить или отдалить изображение"),
+                new HelpRow("< / >", "Глубина цвета", "Предыдущий / следующий режим палитры"),
+                new HelpRow("Ctrl + F", "Автокачество", "Вернуть premium look без пересборки сцены"),
+                new HelpRow("Ctrl + M", "Музыка", "Включить или выключить audio-reactive director"),
+                new HelpRow("Ctrl + B", "Биты", "Показать отладку beat detector"),
+                new HelpRow("Ctrl + R", "Resync", "Синхронизировать audio director заново"),
+                new HelpRow("Space", "Встряхнуть", "Физический импульс или UV-встряска"),
+                new HelpRow("Home / End", "Экспозиция центра", "Светлее / темнее центральная зона"),
+                new HelpRow("Shift + Arrows", "Источник / труба", "Тонкая настройка source framing и физической трубы"),
+                new HelpRow("Shift + F1", "Viewer Mode", "Чистый режим просмотра"),
+                new HelpRow("Shift + F2", "Operator Mode", "Пульт оператора и диагностика")
             };
 
-            sections["DEBUG"] = new List<HelpRow>
+            sections["ГЕОМЕТРИЯ"] = new List<HelpRow>
             {
-                new HelpRow("F1", "Help overlay", "Show or hide this operator manual"),
-                new HelpRow("F2", "Compact debug", "Small technical status panel"),
-                new HelpRow("F3", "Full debug", "Detailed system readout"),
-                new HelpRow("F4", "Hide debug UI", "Clean composition"),
-                new HelpRow("F5", "Reset tuning", "Restore visual defaults"),
-                new HelpRow("F6", "Screenshot", "Capture current eyepiece"),
-                new HelpRow("F7 / F8", "Quality", "Step fidelity down or up"),
-                new HelpRow("Shift + F7 / F8", "Quality extremes", "Jump to Minimal or Extreme"),
-                new HelpRow("F9", "Adaptive quality", "Toggle FPS governor"),
-                new HelpRow("Shift + F9", "Auto-balance", "Toggle recovery tuning"),
-                new HelpRow("F10 / F11", "Performance preset", "Step budget down or up"),
-                new HelpRow("F12", "Safe mode", "Force emergency recovery")
+                new HelpRow("1 / 2 / 3", "Пресеты сегментов", "6 / 12 / 24 сектора"),
+                new HelpRow("Numpad 1", "6 секторов", "60 градусов, классический призматический режим"),
+                new HelpRow("Numpad 2", "12 секторов", "Более дробная симметрия"),
+                new HelpRow("Numpad 3", "24 сектора", "Плотный орнамент"),
+                new HelpRow("Numpad + / -", "Сегменты ±2", "Дробление картинки от 6 до 48"),
+                new HelpRow("Numpad 4 / 6", "Повернуть узор", "Ручной поворот полярной схемы"),
+                new HelpRow("Numpad 5", "Стоп", "Остановить вращение"),
+                new HelpRow("Numpad Enter", "По умолчанию", "Вернуть комфортное движение"),
+                new HelpRow("Numpad 7", "Асимметрия", "Небольшая органическая неровность"),
+                new HelpRow("Numpad 8", "Стыки", "Сглаживание границ секторов"),
+                new HelpRow("Numpad 9", "Маска", "Край окуляра"),
+                new HelpRow("Numpad * / /", "Дыхание / wobble", "Органическое движение оптики")
+            };
+
+            sections["ДИАГНОСТИКА"] = new List<HelpRow>
+            {
+                new HelpRow("F1", "Помощь", "Показать или скрыть эту таблицу"),
+                new HelpRow("Middle Mouse", "Меню", "Открыть или закрыть launcher"),
+                new HelpRow("F2 / F3", "Пульт оператора", "Открыть диагностику и производительность"),
+                new HelpRow("F4", "Чистая картинка", "Скрыть помощь, направляющие и UI"),
+                new HelpRow("F5", "Сброс красоты", "Вернуть визуальные настройки"),
+                new HelpRow("F6", "Скриншот", "Сохранить текущий кадр"),
+                new HelpRow("F12", "Safe Mode", "Аварийное восстановление")
+            };
+
+            sections["КАЧЕСТВО И FPS"] = new List<HelpRow>
+            {
+                new HelpRow("PageUp / PageDown", "Качество рендера", "Только чёткость/пикселизация, без смены композиции"),
+                new HelpRow("Х / Ъ", "Качество рендера", "Х ниже, Ъ выше; дублирует шаги качества"),
+                new HelpRow("F7 / F8", "Качество", "Шаг качества вниз / вверх"),
+                new HelpRow("Shift + F7 / F8", "Минимум / максимум", "Прыжок к крайним уровням"),
+                new HelpRow("F9", "Adaptive Quality", "FPS-защита"),
+                new HelpRow("Shift + F9", "Auto-balance", "Автобаланс производительности"),
+                new HelpRow("Ctrl + A", "Авто режим", "Включить или выключить сценарный оркестратор"),
+                new HelpRow("Shift + F10", "Сценарий", "Включить или выключить автооркестратор"),
+                new HelpRow("Shift + F11", "Сценарий +", "Следующий сценарий эффектов"),
+                new HelpRow("F10 / F11", "Performance preset", "Бюджет производительности вниз / вверх")
             };
         }
 
@@ -205,20 +263,22 @@ namespace KaleidoscopeEngine.UI
             DrawStatusStrip();
             GUILayout.Space(18f);
 
-            GUILayout.BeginHorizontal();
-            DrawSection("VIEW MODES", "MODE");
-            GUILayout.Space(18f);
-            DrawSection("GEOMETRY", "GEO");
-            GUILayout.EndHorizontal();
-            GUILayout.Space(14f);
-            GUILayout.BeginHorizontal();
-            DrawSection("CAMERA", "CAM");
-            GUILayout.Space(18f);
-            DrawSection("DEBUG", "SYS");
-            GUILayout.EndHorizontal();
+            float sectionWidth = (panel.width - 64f - 18f) * 0.5f;
+            for (int i = 0; i < sectionOrder.Length; i += 2)
+            {
+                GUILayout.BeginHorizontal();
+                DrawSection(sectionOrder[i], ResolveIcon(sectionOrder[i]), sectionWidth);
+                if (i + 1 < sectionOrder.Length)
+                {
+                    GUILayout.Space(18f);
+                    DrawSection(sectionOrder[i + 1], ResolveIcon(sectionOrder[i + 1]), sectionWidth);
+                }
+                GUILayout.EndHorizontal();
+                GUILayout.Space(10f);
+            }
 
             GUILayout.FlexibleSpace();
-            GUILayout.Label("Operator console: navigation cluster = composition, numpad = optical geometry, arrows = viewer/source framing.", footerStyle);
+            GUILayout.Label("Viewer Mode is for the clean optical image. Operator Mode is for guides and the separate console.", footerStyle);
             GUILayout.EndArea();
 
             GUI.color = previousColor;
@@ -227,10 +287,10 @@ namespace KaleidoscopeEngine.UI
         private void DrawStatusStrip()
         {
             GUILayout.BeginHorizontal();
-            DrawStatusChip("VIEW", mirrorPipeline != null ? mirrorPipeline.ViewMode : "n/a");
-            DrawStatusChip("SEG", mirrorController != null ? mirrorController.SegmentCount.ToString() : "n/a");
-            DrawStatusChip("DENSITY", mirrorController != null ? mirrorController.OpticalDensity.ToString("F2") : "n/a");
-            DrawStatusChip("OBJECTS", spawner != null ? spawner.SpawnedObjects.Count.ToString() : "n/a");
+            DrawStatusChip("VIEWER", "clean image");
+            DrawStatusChip("OPERATOR", "console + guides");
+            DrawStatusChip("GAME VIEW", "no diagnostics");
+            DrawStatusChip("TOOLS", "off-canvas");
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
         }
@@ -243,9 +303,9 @@ namespace KaleidoscopeEngine.UI
             GUILayout.EndVertical();
         }
 
-        private void DrawSection(string sectionName, string icon)
+        private void DrawSection(string sectionName, string icon, float width)
         {
-            GUILayout.BeginVertical(GUILayout.Width(430f));
+            GUILayout.BeginVertical(GUILayout.Width(width));
             GUILayout.BeginHorizontal();
             GUILayout.Label(icon, keyStyle, GUILayout.Width(52f));
             GUILayout.Label(sectionName, sectionStyle);
@@ -263,6 +323,27 @@ namespace KaleidoscopeEngine.UI
             GUILayout.EndVertical();
         }
 
+        private string ResolveIcon(string sectionName)
+        {
+            switch (sectionName)
+            {
+                case "SOURCE MODES":
+                    return "SRC";
+                case "OPTICAL GUIDES":
+                    return "GDE";
+                case "VIEWER CONTROLS":
+                    return "VIEW";
+                case "GEOMETRY":
+                    return "GEO";
+                case "DIAGNOSTICS":
+                    return "DIA";
+                case "PERFORMANCE":
+                    return "FPS";
+                default:
+                    return "SYS";
+            }
+        }
+
         private void DrawRow(HelpRow row)
         {
             GUILayout.BeginHorizontal(GUILayout.Height(24f));
@@ -270,26 +351,6 @@ namespace KaleidoscopeEngine.UI
             GUILayout.Label(row.Action, actionStyle, GUILayout.Width(138f));
             GUILayout.Label(row.Hint, hintStyle);
             GUILayout.EndHorizontal();
-        }
-
-        private void DrawFeedback()
-        {
-            float remaining = feedbackUntil - Time.unscaledTime;
-            if (remaining <= 0f || string.IsNullOrEmpty(feedbackText))
-            {
-                return;
-            }
-
-            float alpha = Mathf.Clamp01(remaining / Mathf.Max(0.01f, feedbackDuration));
-            alpha = Mathf.SmoothStep(0f, 1f, alpha);
-            Rect rect = new Rect(Screen.width - 360f, Screen.height * 0.56f, 320f, 48f);
-            DrawRect(rect, new Color(0.02f, 0.04f, 0.052f, 0.44f * alpha));
-            DrawBorder(rect, new Color(0.55f, 0.88f, 1f, 0.22f * alpha), 1f);
-
-            Color previous = GUI.color;
-            GUI.color = new Color(0.86f, 0.96f, 1f, alpha);
-            GUI.Label(new Rect(rect.x + 18f, rect.y + 12f, rect.width - 36f, rect.height - 18f), feedbackText, actionStyle);
-            GUI.color = previous;
         }
 
         private void DrawLine(Color color)
