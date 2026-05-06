@@ -5,6 +5,7 @@ using KaleidoscopeEngine.Geometry;
 using KaleidoscopeEngine.Lighting;
 using KaleidoscopeEngine.Materials;
 using KaleidoscopeEngine.Mirrors;
+using KaleidoscopeEngine.UI;
 
 namespace KaleidoscopeEngine.PhysicsSandbox
 {
@@ -28,12 +29,14 @@ namespace KaleidoscopeEngine.PhysicsSandbox
         [SerializeField] private OpticalSourceChamber opticalSourceChamber;
 
         [Header("Input")]
+        [SerializeField] private bool suppressKaleidoscopeShortcutsWhenRouterActive = true;
         [SerializeField] private float shakeStrength = 1f;
         [SerializeField] private float axialSpeedChangePerSecond = 120f;
         [SerializeField] private float movingLightIntensityChangePerSecond = 1.5f;
         [SerializeField] private float sparkleIntensityChangePerSecond = 1.2f;
 
         private readonly HashSet<char> heldCharacters = new HashSet<char>();
+        private KaleidoscopeInputRouter inputRouter;
         private float nextHeldFeedbackTime;
 
         public void Configure(KaleidoscopePhysicsChamber physicsChamber, GemstoneSpawner gemstoneSpawner)
@@ -93,11 +96,15 @@ namespace KaleidoscopeEngine.PhysicsSandbox
                 return;
             }
 
+            bool routerOwnsKaleidoscopeShortcuts = RouterOwnsKaleidoscopeShortcuts();
             bool kaleidoscopeView = mirrorPipeline != null && mirrorPipeline.KaleidoscopeView;
-            Vector2 tilt = new Vector2(
-                ReadAxis(KeyCode.D, 'в', KeyCode.A, 'ф'),
-                ReadAxis(KeyCode.W, 'ц', KeyCode.S, 'ы'));
-            chamber.Tilt(tilt);
+            if (!routerOwnsKaleidoscopeShortcuts)
+            {
+                Vector2 tilt = new Vector2(
+                    ReadAxis(KeyCode.D, 'в', KeyCode.A, 'ф'),
+                    ReadAxis(KeyCode.W, 'ц', KeyCode.S, 'ы'));
+                chamber.Tilt(tilt);
+            }
 
             float rotation = 0f;
             float axialSpeedDelta = 0f;
@@ -119,7 +126,7 @@ namespace KaleidoscopeEngine.PhysicsSandbox
 
             chamber.Rotate(rotation);
 
-            if (Input.GetKeyDown(KeyCode.Space))
+            if (!routerOwnsKaleidoscopeShortcuts && Input.GetKeyDown(KeyCode.Space))
             {
                 chamber.Shake(shakeStrength);
                 spawner?.ApplyVisualPileShake(shakeStrength);
@@ -198,6 +205,21 @@ namespace KaleidoscopeEngine.PhysicsSandbox
                 sparkleController?.AdjustSparkleIntensity(sparkleIntensityChangePerSecond * Time.deltaTime);
                 HeldFeedback($"Sparkle Intensity: {(sparkleController != null ? sparkleController.SparkleIntensity.ToString("F2") : "n/a")}");
             }
+        }
+
+        private bool RouterOwnsKaleidoscopeShortcuts()
+        {
+            if (!suppressKaleidoscopeShortcutsWhenRouterActive)
+            {
+                return false;
+            }
+
+            if (inputRouter == null)
+            {
+                inputRouter = FindObjectOfType<KaleidoscopeInputRouter>();
+            }
+
+            return inputRouter != null && inputRouter.isActiveAndEnabled;
         }
 
         private void OnGUI()

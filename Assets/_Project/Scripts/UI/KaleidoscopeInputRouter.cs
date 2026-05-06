@@ -26,24 +26,24 @@ namespace KaleidoscopeEngine.UI
     public enum KaleidoscopeOperatorAction
     {
         CycleView,
-        ReturnEyepiece,
-        CenterExposureUp,
-        CenterExposureDown,
+        CycleViewBack,
+        ResolutionUp,
+        ResolutionDown,
         DensityUp,
         DensityDown,
         SixSectorMode,
-        EightSectorMode,
         TwelveSectorMode,
+        TwentyFourSectorMode,
         MirrorRotateLeft,
         MirrorRotateRight,
-        ToggleAsymmetry,
-        ToggleSeamBlend,
-        ToggleOpticalMask,
-        DriftUp,
-        DriftDown,
+        CinematicPulse,
+        CrystalDensity,
+        BeautyShot,
+        MirrorCountMultiply,
+        MirrorCountDivide,
         ToggleBreathing,
         ToggleWobble,
-        ToggleDiffuser,
+        ToggleInversion,
         ViewerRotateLeft,
         ViewerRotateRight,
         ViewerZoomIn,
@@ -457,9 +457,9 @@ namespace KaleidoscopeEngine.UI
         {
             bindings.Clear();
             Add(KaleidoscopeControlZone.ViewModes, KaleidoscopeOperatorAction.CycleView, KeyCode.Insert);
-            Add(KaleidoscopeControlZone.ViewModes, KaleidoscopeOperatorAction.ReturnEyepiece, KeyCode.Delete);
-            Add(KaleidoscopeControlZone.ViewModes, KaleidoscopeOperatorAction.CenterExposureUp, KeyCode.Home);
-            Add(KaleidoscopeControlZone.ViewModes, KaleidoscopeOperatorAction.CenterExposureDown, KeyCode.End);
+            Add(KaleidoscopeControlZone.ViewModes, KaleidoscopeOperatorAction.CycleViewBack, KeyCode.Delete);
+            Add(KaleidoscopeControlZone.ViewModes, KaleidoscopeOperatorAction.ResolutionUp, KeyCode.Home);
+            Add(KaleidoscopeControlZone.ViewModes, KaleidoscopeOperatorAction.ResolutionDown, KeyCode.End);
             Add(KaleidoscopeControlZone.ViewModes, KaleidoscopeOperatorAction.QualityUp, KeyCode.PageUp);
             Add(KaleidoscopeControlZone.ViewModes, KaleidoscopeOperatorAction.QualityDown, KeyCode.PageDown);
 
@@ -467,20 +467,20 @@ namespace KaleidoscopeEngine.UI
             // They are intentionally kept out of this passive binding table to avoid duplicate/false dispatch.
 
             Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.SixSectorMode, KeyCode.Keypad1);
-            Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.EightSectorMode, KeyCode.Keypad2);
-            Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.TwelveSectorMode, KeyCode.Keypad3);
+            Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.TwelveSectorMode, KeyCode.Keypad2);
+            Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.TwentyFourSectorMode, KeyCode.Keypad3);
             Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.MirrorRotateLeft, KeyCode.Keypad4);
             Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.MirrorRotateRight, KeyCode.Keypad6);
             Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.StopAllRotation, KeyCode.Keypad5);
-            Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.ToggleAsymmetry, KeyCode.Keypad7);
-            Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.ToggleSeamBlend, KeyCode.Keypad8);
-            Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.ToggleOpticalMask, KeyCode.Keypad9);
+            Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.CinematicPulse, KeyCode.Keypad7);
+            Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.CrystalDensity, KeyCode.Keypad8);
+            Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.BeautyShot, KeyCode.Keypad9);
             Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.RestoreDefaultRotation, KeyCode.KeypadEnter);
             Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.CycleSourceMode, KeyCode.KeypadEnter, true);
-            Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.ResetSourceMode, KeyCode.Keypad0);
+            Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.ToggleInversion, KeyCode.Keypad0);
             Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.RandomizeSourceMode, KeyCode.KeypadPeriod);
-            Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.DriftUp, KeyCode.KeypadPlus);
-            Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.DriftDown, KeyCode.KeypadMinus);
+            Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.MirrorCountMultiply, KeyCode.KeypadPlus);
+            Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.MirrorCountDivide, KeyCode.KeypadMinus);
             Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.ToggleBreathing, KeyCode.KeypadMultiply);
             Add(KaleidoscopeControlZone.Geometry, KaleidoscopeOperatorAction.ToggleWobble, KeyCode.KeypadDivide);
 
@@ -533,7 +533,7 @@ namespace KaleidoscopeEngine.UI
         {
             if (Pressed(KeyCode.Insert))
             {
-                mirrorPipeline?.CycleViewMode();
+                mirrorPipeline?.CycleViewMode(1);
                 if (mirrorPipeline != null && mirrorPipeline.CurrentViewMode == KaleidoscopeViewMode.DebugOrbit)
                 {
                     cameraController?.SetDebugOrbitView();
@@ -544,23 +544,25 @@ namespace KaleidoscopeEngine.UI
 
             if (Pressed(KeyCode.Delete))
             {
-                // Return to final eyepiece mode. Do not also reset the physics
-                // camera here: that controller targets the same Main Camera and
-                // would immediately pull the viewer back into the tube/debug view.
-                mirrorPipeline?.ReturnToKaleidoscopeView();
-                Feedback("Eyepiece View");
+                mirrorPipeline?.CycleViewMode(-1);
+                if (mirrorPipeline != null && mirrorPipeline.CurrentViewMode == KaleidoscopeViewMode.DebugOrbit)
+                {
+                    cameraController?.SetDebugOrbitView();
+                }
+
+                Feedback($"View: {(mirrorPipeline != null ? mirrorPipeline.ViewMode : "Cycle Back")}");
             }
 
-            if (Held(KeyCode.Home))
+            if (Pressed(KeyCode.Home))
             {
-                mirrorController?.AdjustCenterExposure(1f);
-                HeldFeedback("Center Exposure +");
+                KaleidoscopeRuntimeConfig.Current?.AdjustResolutionPreset(1);
+                Feedback($"Resolution: {(KaleidoscopeRuntimeConfig.Current != null ? KaleidoscopeRuntimeConfig.Current.ResolutionPreset.ToString() : "Up")}");
             }
 
-            if (Held(KeyCode.End))
+            if (Pressed(KeyCode.End))
             {
-                mirrorController?.AdjustCenterExposure(-1f);
-                HeldFeedback("Center Exposure -");
+                KaleidoscopeRuntimeConfig.Current?.AdjustResolutionPreset(-1);
+                Feedback($"Resolution: {(KaleidoscopeRuntimeConfig.Current != null ? KaleidoscopeRuntimeConfig.Current.ResolutionPreset.ToString() : "Down")}");
             }
 
             if (Pressed(KeyCode.PageUp) || PressedRenderQualityUp())
@@ -586,57 +588,53 @@ namespace KaleidoscopeEngine.UI
         {
             if (Pressed(KeyCode.Keypad1))
             {
-                mirrorController?.SetStandardPrism60();
-                Feedback("6 Sector Mode");
+                mirrorController?.SetSegmentCountDirect(6);
+                Feedback("Mirrors: 6");
             }
 
             if (Pressed(KeyCode.Keypad2))
             {
-                mirrorController?.SetMirrorAngle45();
-                Feedback("8 Sector Mode");
+                mirrorController?.SetSegmentCountDirect(12);
+                Feedback("Mirrors: 12");
             }
 
             if (Pressed(KeyCode.Keypad3))
             {
-                mirrorController?.SetMirrorAngle30();
-                Feedback("12 Sector Mode");
+                mirrorController?.SetSegmentCountDirect(24);
+                Feedback("Mirrors: 24");
             }
 
-            if (Held(KeyCode.Keypad4))
+            if (Pressed(KeyCode.Keypad4))
             {
-                mirrorController?.RotatePattern(-1f);
-                HeldFeedback("Pattern Nudge -");
+                mirrorController?.TriggerKeyboardSpinBurst(1);
+                Feedback("Fast Spin +");
             }
 
-            if (Held(KeyCode.Keypad6))
+            if (Pressed(KeyCode.Keypad6))
             {
-                mirrorController?.RotatePattern(1f);
-                HeldFeedback("Pattern Nudge +");
+                mirrorController?.TriggerKeyboardSpinBurst(-1);
+                Feedback("Fast Spin -");
             }
 
             if (Pressed(KeyCode.Keypad5))
             {
-                mirrorController?.StopPatternRotation();
-                chamber?.StopAxialRotation();
-                Feedback("Rotation Stopped");
+                mirrorController?.CancelHighSpeedRotationToBaseline();
+                Feedback("Rotation Baseline Restored");
             }
 
             if (Pressed(KeyCode.Keypad7))
             {
-                mirrorController?.ToggleAsymmetry();
-                Feedback(mirrorController != null && mirrorController.AsymmetryEnabled ? "Asymmetry Enabled" : "Asymmetry Disabled");
+                Feedback("Cinematic Pulse reserved for Stage 03");
             }
 
             if (Pressed(KeyCode.Keypad8))
             {
-                mirrorController?.ToggleSeamBlending();
-                Feedback(mirrorController != null && mirrorController.SeamBlendingEnabled ? "Seam Blend Enabled" : "Seam Blend Disabled");
+                Feedback("Crystal Density reserved for Stage 04");
             }
 
             if (Pressed(KeyCode.Keypad9))
             {
-                mirrorController?.ToggleOpticalMask();
-                Feedback($"Optical Mask: {(mirrorController != null ? mirrorController.MaskModeName : "Toggle")}");
+                Feedback("Beauty Shot reserved for Stage 04");
             }
 
             if (Pressed(KeyCode.KeypadEnter))
@@ -657,8 +655,7 @@ namespace KaleidoscopeEngine.UI
 
             if (Pressed(KeyCode.Keypad0))
             {
-                opticalSourceChamber?.ToggleDiffuserModule();
-                Feedback(opticalSourceChamber != null && opticalSourceChamber.DiffuserEnabled ? "Diffuser Enabled" : "Diffuser Disabled");
+                Feedback("Inversion reserved for Stage 03");
             }
 
             if (Pressed(KeyCode.KeypadPeriod))
@@ -669,14 +666,14 @@ namespace KaleidoscopeEngine.UI
 
             if (Pressed(KeyCode.KeypadPlus))
             {
-                mirrorController?.AdjustRotationalDrift(1f);
-                Feedback("Rotational Drift +");
+                mirrorController?.MultiplySegmentCount(2);
+                Feedback($"Mirrors: {(mirrorController != null ? mirrorController.ComputedSegmentCount.ToString() : "x2")}");
             }
 
             if (Pressed(KeyCode.KeypadMinus))
             {
-                mirrorController?.AdjustRotationalDrift(-1f);
-                Feedback("Rotational Drift -");
+                mirrorController?.DivideSegmentCount(2);
+                Feedback($"Mirrors: {(mirrorController != null ? mirrorController.ComputedSegmentCount.ToString() : "/2")}");
             }
 
             if (Pressed(KeyCode.KeypadMultiply))
@@ -736,16 +733,25 @@ namespace KaleidoscopeEngine.UI
                 Feedback("Shake");
             }
 
+            int spinDirection = 0;
             if (Held(KeyCode.LeftArrow))
             {
-                mirrorController?.AdjustPatternSpinSpeed(-patternSpeedStep, IsExperimentalSourceMode());
-                HeldFeedback($"Spin: {(mirrorController != null ? mirrorController.RequestedPatternRotationSpeedDeg.ToString("+0;-0;0") : "n/a")} deg/s");
+                spinDirection--;
             }
 
             if (Held(KeyCode.RightArrow))
             {
-                mirrorController?.AdjustPatternSpinSpeed(patternSpeedStep, IsExperimentalSourceMode());
+                spinDirection++;
+            }
+
+            if (spinDirection != 0)
+            {
+                mirrorController?.HoldKeyboardRotation(spinDirection, IsExperimentalSourceMode());
                 HeldFeedback($"Spin: {(mirrorController != null ? mirrorController.RequestedPatternRotationSpeedDeg.ToString("+0;-0;0") : "n/a")} deg/s");
+            }
+            else
+            {
+                mirrorController?.ReleaseKeyboardRotation();
             }
 
             if (Held(KeyCode.UpArrow))
