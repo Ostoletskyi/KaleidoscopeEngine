@@ -66,6 +66,14 @@ namespace KaleidoscopeEngine.UI
             resolutionPreset = preset;
         }
 
+        public void AdjustResolutionPreset(int delta)
+        {
+            int count = System.Enum.GetValues(typeof(KaleidoscopeResolutionPreset)).Length;
+            int index = Mathf.Clamp((int)resolutionPreset + delta, 0, count - 1);
+            resolutionPreset = (KaleidoscopeResolutionPreset)index;
+            ApplyResolution();
+        }
+
         public void SetWindowMode(KaleidoscopeWindowMode mode)
         {
             windowMode = mode;

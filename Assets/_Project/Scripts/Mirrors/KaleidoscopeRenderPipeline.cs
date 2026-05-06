@@ -221,21 +221,28 @@ namespace KaleidoscopeEngine.Mirrors
 
         public void CycleViewMode()
         {
-            switch (viewMode)
+            CycleViewMode(1);
+        }
+
+        public void CycleViewMode(int direction)
+        {
+            KaleidoscopeViewMode[] modes =
             {
-                case KaleidoscopeViewMode.Kaleidoscope:
-                    SetViewMode(KaleidoscopeViewMode.RawTube);
-                    break;
-                case KaleidoscopeViewMode.RawTube:
-                    SetViewMode(KaleidoscopeViewMode.SourcePreview);
-                    break;
-                case KaleidoscopeViewMode.SourcePreview:
-                    SetViewMode(KaleidoscopeViewMode.DebugOrbit);
-                    break;
-                default:
-                    SetViewMode(KaleidoscopeViewMode.Kaleidoscope);
-                    break;
+                KaleidoscopeViewMode.Kaleidoscope,
+                KaleidoscopeViewMode.RawTube,
+                KaleidoscopeViewMode.SourcePreview,
+                KaleidoscopeViewMode.DebugOrbit
+            };
+
+            int currentIndex = System.Array.IndexOf(modes, viewMode);
+            if (currentIndex < 0)
+            {
+                currentIndex = 0;
             }
+
+            int step = direction < 0 ? -1 : 1;
+            int nextIndex = (currentIndex + step + modes.Length) % modes.Length;
+            SetViewMode(modes[nextIndex]);
         }
 
         public void ToggleSourcePreview()

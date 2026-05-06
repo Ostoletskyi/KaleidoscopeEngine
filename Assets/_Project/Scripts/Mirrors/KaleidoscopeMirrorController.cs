@@ -137,16 +137,19 @@ namespace KaleidoscopeEngine.Mirrors
         [Tooltip("Static angle offset in degrees before runtime rotation is applied.")]
         [SerializeField] private float mirrorAngleOffset;
         [Tooltip("Automatic pattern rotation in degrees per second.")]
-        [SerializeField] private float patternRotationSpeed = 4f;
-        [SerializeField] private float defaultPatternRotationSpeed = 4f;
-        [SerializeField] private float requestedPatternRotationSpeed;
+        [SerializeField] private float patternRotationSpeed = 5f;
+        [SerializeField] private float defaultPatternRotationSpeed = 5f;
+        [SerializeField] private float requestedPatternRotationSpeed = 5f;
         [SerializeField] private float effectivePatternRotationSpeed;
         [SerializeField] private float rotationAcceleration = 12f;
         [SerializeField] private float rotationDamping = 5f;
         [SerializeField] private bool patternSpinEnabled = true;
-        [SerializeField] private float patternSpinSpeedDeg = 4f;
+        [SerializeField] private float patternSpinSpeedDeg = 5f;
         [SerializeField] private float patternSpinAcceleration = 280f;
         [SerializeField] private float patternSpinDamping = 180f;
+        [SerializeField] private float keyboardRotationTargetSpeed = 300f;
+        [SerializeField] private float keyboardRotationHoldSeconds = 10f;
+        [SerializeField] private float keyboardRotationBaselineRestoreSpeed = 35f;
         [SerializeField] private float spinSmoothingTime = 0.16f;
         [SerializeField] private float spinJerkLimit = 7200f;
         [SerializeField] private bool smoothStop = true;
@@ -374,6 +377,9 @@ namespace KaleidoscopeEngine.Mirrors
         private float smoothedScaleDrift;
         private float zoomVelocity;
         private float angularStepPerFrame;
+        private bool keyboardRotationHeld;
+        private bool explicitPatternStopActive;
+        private float lastKeyboardRotationInputTime = -1000f;
         private KaleidoscopeSpinStabilityState spinStabilityState = KaleidoscopeSpinStabilityState.Stable;
         private bool directTextureSource;
         private bool animatedImageSource;
@@ -412,6 +418,7 @@ namespace KaleidoscopeEngine.Mirrors
         public float PatternSpinSpeedDeg => patternSpinSpeedDeg;
         public float RequestedPatternRotationSpeedDeg => requestedPatternRotationSpeed;
         public float EffectivePatternRotationSpeedDeg => effectivePatternRotationSpeed;
+        public float BaselinePatternRotationSpeedDeg => defaultPatternRotationSpeed;
         public float PatternSpinMinDeg => minPatternSpinSpeedDeg;
         public float PatternSpinMaxDeg => maxPatternSpinSpeedDeg;
         public bool PatternSpinEnabled => patternSpinEnabled;
@@ -538,6 +545,16 @@ namespace KaleidoscopeEngine.Mirrors
             float dt = Time.deltaTime;
             float dampingScale = Mathf.Lerp(1f, 0.28f, globalMotionDamping);
             float activeSpinLimit = Mathf.Max(Mathf.Abs(minPatternSpinSpeedDeg), Mathf.Abs(maxPatternSpinSpeedDeg));
+            if (!keyboardRotationHeld &&
+                !explicitPatternStopActive &&
+                Time.time - lastKeyboardRotationInputTime >= Mathf.Max(0f, keyboardRotationHoldSeconds))
+            {
+                requestedPatternRotationSpeed = Mathf.MoveTowards(
+                    requestedPatternRotationSpeed,
+                    Mathf.Clamp(defaultPatternRotationSpeed, minPatternSpinSpeedDeg, maxPatternSpinSpeedDeg),
+                    Mathf.Max(0.01f, keyboardRotationBaselineRestoreSpeed) * dt);
+            }
+
             float spinAccelerationThisFrame = Mathf.Min(
                 Mathf.Max(0.01f, rotationAcceleration),
                 Mathf.Max(0.01f, spinJerkLimit) * dt);
@@ -737,6 +754,86 @@ namespace KaleidoscopeEngine.Mirrors
             AdjustPatternSpinSpeed(deltaDegPerSecond, false);
         }
 
+        public void SetRotationBaseline(float speedDegPerSecond)
+        {
+            defaultPatternRotationSpeed = Mathf.Clamp(speedDegPerSecond, minPatternSpinSpeedDeg, maxPatternSpinSpeedDeg);
+            if (!keyboardRotationHeld && !explicitPatternStopActive)
+            {
+                requestedPatternRotationSpeed = defaultPatternRotationSpeed;
+                patternSpinEnabled = true;
+            }
+
+            ApplyShaderValues();
+        }
+
+        public void HoldKeyboardRotation(int direction, bool experimentalRange)
+        {
+            int signedDirection = direction < 0 ? -1 : direction > 0 ? 1 : 0;
+            if (signedDirection == 0)
+            {
+                ReleaseKeyboardRotation();
+                return;
+            }
+
+            float limit = experimentalRange
+                ? maxPatternSpinSpeedDeg
+                : Mathf.Min(maxPatternSpinSpeedDeg, Mathf.Max(comfortPatternSpinSpeedLimit, maxPatternAngularVelocity));
+            float target = Mathf.Clamp(
+                signedDirection * Mathf.Max(1f, keyboardRotationTargetSpeed),
+                Mathf.Max(minPatternSpinSpeedDeg, -limit),
+                Mathf.Min(maxPatternSpinSpeedDeg, limit));
+
+            requestedPatternRotationSpeed = Mathf.MoveTowards(
+                requestedPatternRotationSpeed,
+                target,
+                Mathf.Max(1f, patternSpinAcceleration) * Time.deltaTime);
+            keyboardRotationHeld = true;
+            explicitPatternStopActive = false;
+            lastKeyboardRotationInputTime = Time.time;
+            patternSpinEnabled = true;
+            ApplyShaderValues();
+        }
+
+        public void ReleaseKeyboardRotation()
+        {
+            if (!keyboardRotationHeld)
+            {
+                return;
+            }
+
+            keyboardRotationHeld = false;
+            lastKeyboardRotationInputTime = Time.time;
+        }
+
+        public void TriggerKeyboardSpinBurst(int direction)
+        {
+            int signedDirection = direction < 0 ? -1 : direction > 0 ? 1 : 0;
+            if (signedDirection == 0)
+            {
+                return;
+            }
+
+            requestedPatternRotationSpeed = Mathf.Clamp(
+                signedDirection * Mathf.Max(1f, keyboardRotationTargetSpeed),
+                minPatternSpinSpeedDeg,
+                maxPatternSpinSpeedDeg);
+            keyboardRotationHeld = false;
+            explicitPatternStopActive = false;
+            lastKeyboardRotationInputTime = Time.time;
+            patternSpinEnabled = true;
+            ApplyShaderValues();
+        }
+
+        public void CancelHighSpeedRotationToBaseline()
+        {
+            keyboardRotationHeld = false;
+            explicitPatternStopActive = false;
+            lastKeyboardRotationInputTime = -1000f;
+            requestedPatternRotationSpeed = Mathf.Clamp(defaultPatternRotationSpeed, minPatternSpinSpeedDeg, maxPatternSpinSpeedDeg);
+            patternSpinEnabled = true;
+            ApplyShaderValues();
+        }
+
         public void AdjustPatternSpinSpeed(float direction, bool experimentalRange)
         {
             float limit = experimentalRange
@@ -747,6 +844,7 @@ namespace KaleidoscopeEngine.Mirrors
                 Mathf.Max(minPatternSpinSpeedDeg, -limit),
                 Mathf.Min(maxPatternSpinSpeedDeg, limit));
             patternSpinEnabled = true;
+            explicitPatternStopActive = false;
             ApplyShaderValues();
         }
 
@@ -754,6 +852,7 @@ namespace KaleidoscopeEngine.Mirrors
         {
             requestedPatternRotationSpeed = Mathf.Clamp(speedDegPerSecond, minPatternSpinSpeedDeg, maxPatternSpinSpeedDeg);
             patternSpinEnabled = !Mathf.Approximately(requestedPatternRotationSpeed, 0f);
+            explicitPatternStopActive = Mathf.Approximately(requestedPatternRotationSpeed, 0f);
             ApplyShaderValues();
         }
 
@@ -899,12 +998,16 @@ namespace KaleidoscopeEngine.Mirrors
         public void StopPatternRotation()
         {
             requestedPatternRotationSpeed = 0f;
+            keyboardRotationHeld = false;
+            explicitPatternStopActive = true;
         }
 
         public void RestoreDefaultPatternRotation()
         {
             requestedPatternRotationSpeed = Mathf.Clamp(defaultPatternRotationSpeed, minPatternSpinSpeedDeg, maxPatternSpinSpeedDeg);
             patternSpinEnabled = true;
+            keyboardRotationHeld = false;
+            explicitPatternStopActive = false;
             if (!smoothResume)
             {
                 patternRotationSpeed = requestedPatternRotationSpeed;
@@ -940,6 +1043,16 @@ namespace KaleidoscopeEngine.Mirrors
         public void SetSegmentCount(int segments)
         {
             SetSegmentCountDirect(segments);
+        }
+
+        public void MultiplySegmentCount(int factor)
+        {
+            SetSegmentCountDirect(ComputedSegmentCount * Mathf.Max(1, factor));
+        }
+
+        public void DivideSegmentCount(int divisor)
+        {
+            SetSegmentCountDirect(Mathf.Max(1, ComputedSegmentCount / Mathf.Max(1, divisor)));
         }
 
         public void AdjustSegmentCountByStep(int delta)
@@ -1240,6 +1353,9 @@ namespace KaleidoscopeEngine.Mirrors
             patternRotationSpeed = defaultPatternRotationSpeed;
             requestedPatternRotationSpeed = defaultPatternRotationSpeed;
             effectivePatternRotationSpeed = 0f;
+            keyboardRotationHeld = false;
+            explicitPatternStopActive = false;
+            lastKeyboardRotationInputTime = -1000f;
             patternZoom = 1.18f;
             requestedPatternZoom = 1.18f;
             effectivePatternZoom = 1.18f;
